@@ -198,6 +198,22 @@ def run_tx_train(cfg: DictConfig):
     # Add BatchSpeedMonitorCallback to log batches per second to wandb
     batch_speed_monitor = BatchSpeedMonitorCallback()
     callbacks = ckpt_callbacks + [batch_speed_monitor]
+    
+    # Add ScheduledFinetuningCallback if finetuning schedule is specified in the config
+    finetuning_schedule = cfg["training"].get("finetuning_schedule", None)
+    if finetuning_schedule and finetuning_schedule.get("enable", False):
+        logger.info("Calling ScheduledFinetuningCallback.")
+        finetune_steps = finetuning_schedule.get("finetune_steps", 0)
+        modules_to_unfreeze = finetuning_schedule.get("modules_to_unfreeze", [])
+        
+        if finetune_steps > 0 and modules_to_unfreeze:
+            scheduled_finetuning_callback = ScheduledFinetuningCallback(
+                finetune_steps=finetune_steps,
+                modules_to_unfreeze=modules_to_unfreeze,
+            )
+            callbacks.append(scheduled_finetuning_callback)
+        else:
+            logger.warning("Finetuning schedule is enabled but 'finetune_steps' or 'modules_to_unfreeze' are not set. Skipping.")
 
     logger.info("Loggers and callbacks set up.")
 
@@ -213,6 +229,8 @@ def run_tx_train(cfg: DictConfig):
 
     if torch.cuda.is_available():
         accelerator = "gpu"
+    elif torch.backends.mps.is_available():
+        accelerator = "mps"
     else:
         accelerator = "cpu"
     
@@ -247,10 +265,17 @@ def run_tx_train(cfg: DictConfig):
     else:
         logging.info(f"!! Resuming training from {checkpoint_path} !!")
 
-    print(f"Model device: {next(model.parameters()).device}")
-    print(f"CUDA memory allocated: {torch.cuda.memory_allocated() / 1024**3:.2f} GB")
-    print(f"CUDA memory reserved: {torch.cuda.memory_reserved() / 1024**3:.2f} GB")
+    if torch.mps.is_available():
+        print(f"Model device: {next(model.parameters()).device}")
+        print(f"METAL memory allocated: {torch.mps.memory_allocated() / 1024**3:.2f} GB")
+        print(f"METAL memory reserved: {torch.mps.memory_reserved() / 1024**3:.2f} GB")
 
+    else:    
+        print(f"Model device: {next(model.parameters()).device}")
+        print(f"CUDA memory allocated: {torch.cuda.memory_allocated() / 1024**3:.2f} GB")
+        print(f"CUDA memory reserved: {torch.cuda.memory_reserved() / 1024**3:.2f} GB")
+    
+    
     logger.info("Starting trainer fit.")
 
     # if a checkpoint does not exist, start with the provided checkpoint
@@ -259,7 +284,7 @@ def run_tx_train(cfg: DictConfig):
     if checkpoint_path is None and manual_init is not None:
         print(f"Loading manual checkpoint from {manual_init}")
         checkpoint_path = manual_init
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        device = torch.device("cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu")
         checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
         model_state = model.state_dict()
         checkpoint_state = checkpoint["state_dict"]
@@ -272,7 +297,7 @@ def run_tx_train(cfg: DictConfig):
             print(f"Output space mismatch: checkpoint has '{checkpoint_output_space}', current config has '{current_output_space}'")
             print("Creating new decoder for the specified output space...")
 
-            if cfg["model"]["kwargs"].get("gene_decoder_bool", True) == False:
+            if not cfg["model"]["kwargs"].get("gene_decoder_bool", True):
                 model._decoder_externally_configured = False
             else:
                 # Override the decoder_cfg to match the new output_space
