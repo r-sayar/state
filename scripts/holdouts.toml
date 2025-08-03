@@ -1,0 +1,125 @@
+# Dataset paths - maps dataset names to their directories
+[datasets]
+replogle_h1 = "competition_support_set/{competition_train,k562_gwps,rpe1,jurkat,k562,hepg2}.h5" # CHANGE THIS TO YOUR DIRECTORY
+
+# Training specifications
+# All cell types in a dataset automatically go into training (excluding zeroshot/fewshot overrides)
+[training]
+replogle_h1 = "train"
+
+# Zeroshot specifications - entire cell types go to val or test
+[zeroshot]
+
+# Fewshot specifications - explicit perturbation lists
+[fewshot]
+
+[fewshot."replogle_h1.k562"]
+val = [
+    # Tumor suppressors
+    "TP53", "BRCA1", "BRCA2", "PTEN", "RB1", 
+    # Oncogenes  
+    "MYC", "EGFR", "BRAF", "HRAS", "NRAS",
+    # Cell cycle regulators
+    "CDKN1A", "CDK4", "CCND1", "MDM2",
+    # Apoptosis regulators
+    "BCL2", "BAX", "CASP3", "CASP9", 
+    # Signaling pathways
+    "AKT1", "STAT3", "JAK2", "MAPK1", "MAPK3",
+    # DNA repair
+    "MLH1", "MSH2"
+]
+
+test = [
+    # DNA damage response
+    "ATM", "CHEK1", "CHEK2", "NF1", "NF2",
+    # Receptor tyrosine kinases
+    "FGFR1", "FGFR2", "PDGFRA", "KIT", "MET", "RET",
+    # Extended signaling
+    "AKT2", "AKT3", "STAT1", "JAK1", "HIF1A",
+    # Transcription factors
+    "FOS", "FOXO1", "FOXO3", "GSK3B",
+    # DNA repair pathways
+    "FANCD2", "PMS2", "MSH6", "POLE",
+    # Metabolic regulators
+    "TSC1", "TSC2"
+]
+
+[fewshot."replogle_h1.hepg2"]
+val = [
+    # Metabolic genes (liver-relevant)
+    "INSR", "IGF1R", "VEGFA", "TERT", "IDO1",
+    # Cancer drivers
+    "PIK3CA", "ERBB2", "ERBB3", "ABL1", "SRC",
+    # Cell cycle
+    "CHEK1", "POLE", "POLD1", "TERC",
+    # Signaling pathways
+    "PDGFRB", "FGFR3", "FGFR4", "ROS1", "ALK",
+    # Immune-related
+    "PDCD1", "CD274", "CTLA4", "LAG3", "TIGIT", "HAVCR2"
+]
+
+test = [
+    # Additional metabolic
+    "STK11", "PIK3R1", "PIK3R2", "ERBB4", "FLT3",
+    # DNA repair
+    "FANCA", "FANCC", "FANCF", "FANCG", "IDO2",
+    # More signaling
+    "CASP9", "VEGFA", "TSC1", "TSC2", "NF1",
+    # Additional targets
+    "PDGFRA", "KIT", "MET", "RET", "BRAF",
+    "HIF1A", "FOXO1", "FOXO3", "GSK3B", "JAK1"
+]
+
+[fewshot."replogle_h1.jurkat"]  
+val = [
+    # T-cell relevant
+    "PDCD1", "CD274", "CTLA4", "LAG3", "TIGIT",
+    # Immune signaling
+    "JAK1", "JAK2", "STAT1", "STAT3", "NFKB1",
+    # Cell cycle
+    "TP53", "MDM2", "CDKN1A", "RB1", "CCND1",
+    # Apoptosis
+    "BCL2", "BAX", "CASP3", "CASP9", "FOS",
+    # Kinases
+    "AKT1", "MAPK1", "MAPK3", "SRC", "ABL1"
+]
+
+test = [
+    # Extended immune
+    "HAVCR2", "TIGIT", "FOXO1", "FOXO3", "GSK3B",
+    # More signaling
+    "BRAF", "HRAS", "NRAS", "MYC", "EGFR",
+    # DNA repair
+    "BRCA1", "BRCA2", "ATM", "CHEK1", "CHEK2",
+    # Metabolic
+    "PTEN", "PIK3CA", "MTOR", "TSC1", "TSC2",
+    # Additional
+    "HIF1A", "VEGFA", "FGFR1", "FGFR2", "NF1"
+]
+
+[fewshot."replogle_h1.rpe1"]
+val = [
+    # Cell cycle (relevant for retinal cells)
+    "RB1", "TP53", "MDM2", "CDKN1A", "CDK4",
+    # Growth factors
+    "VEGFA", "FGFR1", "FGFR2", "PDGFRA", "EGFR",
+    # DNA repair
+    "BRCA1", "BRCA2", "MLH1", "MSH2", "ATM",
+    # Signaling
+    "PTEN", "AKT1", "MAPK1", "STAT3", "JAK2",
+    # Apoptosis
+    "BCL2", "BAX", "CASP3", "CASP9", "FOS"
+]
+
+test = [
+    # Extended growth
+    "IGF1R", "INSR", "MET", "RET", "KIT",
+    # More DNA repair
+    "CHEK1", "CHEK2", "FANCD2", "PMS2", "MSH6",
+    # Additional signaling
+    "BRAF", "HRAS", "NRAS", "PIK3CA", "MTOR",
+    # Transcription
+    "MYC", "HIF1A", "FOXO1", "FOXO3", "GSK3B",
+    # Metabolic
+    "TSC1", "TSC2", "STK11", "NF1", "NF2"
+]
