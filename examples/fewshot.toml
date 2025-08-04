@@ -1,5 +1,5 @@
 [datasets]
-replogle_h1 = "/raid/kreid/v_cell/competition_support_set/"
+replogle_h1 = "/raid/kreid/v_cell/competition_support_set"
 
 [training]
 replogle_h1 = "train"
