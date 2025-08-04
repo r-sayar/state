@@ -7,6 +7,6 @@ replogle_h1 = "train"
 [zeroshot]
 
 [fewshot]
-[fewshot."replogle_h1.competition_train"]
-val = ["CHMP3", "AKT2", "SHPRH",]
+[fewshot."replogle_h1.ARC_H1"]
+val = ["CHMP3", "AKT2", "SHPRH"]
 test = ["TMSB4X", "KLF10"]
