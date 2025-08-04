@@ -24,6 +24,9 @@ PERT_FEATURES="/raid/kreid/v_cell/competition_support_set/ESM2_pert_features.pt"
 # -- Activate working environment --
 # TODO:Activate working environment
 
+# Exit on error
+set -e
+
 # Run the training command
 uv run state tx train \
   data.kwargs.toml_config_path="${TOML_CONFIG}" \
