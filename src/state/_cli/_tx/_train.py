@@ -264,22 +264,6 @@ def run_tx_train(cfg: DictConfig):
         checkpoint_path = None
     else:
         logging.info(f"!! Resuming training from {checkpoint_path} !!")
-
-    if torch.cuda.is_available():
-        print(f"Model device: {next(model.parameters()).device}")
-        print(f"CUDA memory allocated: {torch.mps.memory_allocated() / 1024**3:.2f} GB")
-        print(f"CUDA memory reserved: {torch.mps.memory_reserved() / 1024**3:.2f} GB")
-    
-    elif torch.backends.mps.is_available():
-        print(f"Model device: {next(model.parameters()).device}")
-        print(f"METAL memory allocated: {torch.mps.memory_allocated() / 1024**3:.2f} GB")
-        print(f"METAL memory reserved: {torch.mps.memory_reserved() / 1024**3:.2f} GB")
-    
-    else:    
-        print(f"Model device: {next(model.parameters()).device}")
-        print(f"CUDA memory allocated: {torch.cuda.memory_allocated() / 1024**3:.2f} GB")
-        print(f"CUDA memory reserved: {torch.cuda.memory_reserved() / 1024**3:.2f} GB")
-    
     
     logger.info("Starting trainer fit.")
 
