@@ -6,16 +6,16 @@
 MODEL_DIR="competition"
 
 # experiment name
-NAME="training_finetune"
+NAME="training_finetune_andrew"
 
 # old checkpoint name
 # CKPT="step30000l1d063.ckpt"
 
 # toml config path
-TOML_CONFIG="examples/fewshot.toml"
+TOML_CONFIG="examples/andrewfewshot.toml"
 
 # number of workers
-NUM_WORKERS=4
+NUM_WORKERS=8
 
 # perturbation features file
 PERT_FEATURES="competition_support_set/ESM2_pert_features.pt"
@@ -23,6 +23,8 @@ PERT_FEATURES="competition_support_set/ESM2_pert_features.pt"
 
 # -- Activate working environment --
 # TODO:Activate working environment
+source ~/miniforge3/etc/profile.d/conda.sh
+conda activate mne
 
 # Exit on error
 set -e
@@ -36,9 +38,9 @@ uv run state tx train \
   data.kwargs.cell_type_key="cell_type" \
   data.kwargs.control_pert="non-targeting" \
   data.kwargs.perturbation_features_file="${PERT_FEATURES}" \
-  training.max_steps=30000 \
-  training.ckpt_every_n_steps=5000 \
-  training.val_freq=200 \
+  training.max_steps=1000 \
+  training.ckpt_every_n_steps=500 \
+  training.val_freq=100 \
   model=state_sm \
   model.kwargs.nb_decoder=true \
   wandb.tags="[${NAME}]" \
