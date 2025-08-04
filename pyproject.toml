@@ -15,7 +15,6 @@ authors = [
 ]
 requires-python = ">=3.10,<3.13"
 dependencies = [
-    "cell_load @ git+ssh://git@github.com/VCC_25/cell_load",
     "anndata>=0.11.4",
     "numpy>=2.2.6",
     "pandas>=2.2.3",
@@ -30,6 +29,7 @@ dependencies = [
     "geomloss>=0.2.6",
     "transformers>=4.52.3",
     "cell-eval>=0.5.22",
+    "cell-load @ git+https://github.com/VCC-25/cell-load",
 ]
 
 [project.optional-dependencies]

@@ -11,3 +11,4 @@ src/state/configs/wandb/*
 tmp/
 notebooks/
 *.sif
+competition/

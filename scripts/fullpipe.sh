@@ -9,7 +9,7 @@ MODEL_DIR="competition"
 NAME="training_finetune"
 
 # old checkpoint name
-CKPT="step30000l1d063.ckpt"
+# CKPT="step30000l1d063.ckpt"
 
 # toml config path
 TOML_CONFIG="examples/fewshot.toml"
@@ -18,7 +18,7 @@ TOML_CONFIG="examples/fewshot.toml"
 NUM_WORKERS=4
 
 # perturbation features file
-PERT_FEATURES="competition_support_set/ESM2_pert_features.pt"
+PERT_FEATURES="/raid/kreid/v_cell/competition_support_set/ESM2_pert_features.pt"
 
 
 # -- Activate working environment --
@@ -38,7 +38,6 @@ uv run state tx train \
   training.val_freq=200 \
   model=state_sm \
   model.kwargs.nb_decoder=true \
-  model.kwargs.init_from="${MODEL_DIR}/${NAME}/checkpoints/${CKPT}" \
   wandb.tags="[${NAME}]" \
   output_dir="${MODEL_DIR}" \
   name="${NAME}" \
