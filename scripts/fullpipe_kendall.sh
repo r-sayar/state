@@ -43,15 +43,12 @@ uv run state tx train \
   name="${NAME}" \
   use_wandb=false
 
-# # Edit the predict command to add "state" mapping
-# sed -i '' 's/elif model_class_name.lower() in \["neuralot", "pertsets"\]:/elif model_class_name.lower() in ["neuralot", "pertsets", "state"]:/' src/state/_cli/_tx/_predict.py
-
 # # -- Predict --
 # # gets metrics.csv along with real and predicted adata from test holdouts
 # uv run state tx predict \
 #     --checkpoint "final.ckpt" \
 #     --output_dir "${MODEL_DIR}/${NAME}/" \
-#     --profile "full"
+#     --profile full
 
 # # -- Infer --
 # # gets prediction.h5ad for the competition submission
