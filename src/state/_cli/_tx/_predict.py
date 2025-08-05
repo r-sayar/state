@@ -146,7 +146,7 @@ def run_tx_predict(args: ap.ArgumentParser):
         from ...tx.models.old_neural_ot import OldNeuralOTPerturbationModel
 
         ModelClass = OldNeuralOTPerturbationModel
-    elif model_class_name.lower() in ["neuralot", "pertsets"]:
+    elif model_class_name.lower() in ["neuralot", "pertsets", "state"]:
         from ...tx.models.state_transition import StateTransitionPerturbationModel
 
         ModelClass = StateTransitionPerturbationModel
