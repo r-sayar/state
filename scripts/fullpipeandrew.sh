@@ -23,8 +23,6 @@ PERT_FEATURES="competition_support_set/ESM2_pert_features.pt"
 
 # -- Activate working environment --
 # TODO:Activate working environment
-source ~/miniforge3/etc/profile.d/conda.sh
-conda activate mne
 
 # Exit on error
 set -e
