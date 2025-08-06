@@ -6,7 +6,7 @@
 MODEL_DIR="competition"
 
 # experiment name
-NAME="training_reg_0.3_2000_steps_mmd"
+NAME="training_2000_steps_NB"
 
 # old checkpoint name
 # CKPT="step30000l1d063.ckpt"
@@ -39,15 +39,15 @@ uv run state tx train \
   data.kwargs.cell_type_key="cell_type" \
   data.kwargs.control_pert="non-targeting" \
   data.kwargs.perturbation_features_file="${PERT_FEATURES}" \
-  training.max_steps=2000 \
+  training.max_steps=4000 \
   training.ckpt_every_n_steps=5000 \
   training.val_freq=200 \
   model=state_sm \
-  +model.kwargs.transformer_backbone.regularization=0.3 \
-  +model.kwargs.transformer_backbone_kwargs.resid_pdrop=0.3 \
-  +model.kwargs.transformer_backbone_kwargs.attn_pdrop=0.3 \
-  +model.kwargs.transformer_backbone_kwargs.embd_pdrop=0.3 \
-  model.kwargs.nb_decoder=false \
+  +model.kwargs.transformer_backbone.regularization=0.0 \
+  +model.kwargs.transformer_backbone_kwargs.resid_pdrop=0.0 \
+  +model.kwargs.transformer_backbone_kwargs.attn_pdrop=0.0 \
+  +model.kwargs.transformer_backbone_kwargs.embd_pdrop=0.0 \
+  model.kwargs.nb_decoder=true \
   wandb.tags="[${NAME}]" \
   output_dir="${MODEL_DIR}" \
   name="${NAME}" \
