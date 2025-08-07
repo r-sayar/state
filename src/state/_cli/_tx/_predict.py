@@ -151,11 +151,11 @@ def run_tx_predict(args: ap.ArgumentParser):
 
         ModelClass = StateTransitionPerturbationModel
 
-    elif model_class_name.lower() == "globalsimplesum":
+    elif model_class_name.lower() in ["globalsimplesum", "perturb_mean"]:
         from ...tx.models.perturb_mean import PerturbMeanPerturbationModel
 
         ModelClass = PerturbMeanPerturbationModel
-    elif model_class_name.lower() == "celltypemean":
+    elif model_class_name.lower() in ["celltypemean", "context_mean"]:
         from ...tx.models.context_mean import ContextMeanPerturbationModel
 
         ModelClass = ContextMeanPerturbationModel
