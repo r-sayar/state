@@ -14,3 +14,4 @@ notebooks/
 competition/
 competition_support_set/
 local_*.sh
+*outdir*
