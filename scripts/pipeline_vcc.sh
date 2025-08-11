@@ -28,15 +28,40 @@ THREADS=8
 NUM_WORKERS=8
 BATCH_SIZE=100
 
-# -- Activate working environment --
-source ~/miniforge3/etc/profile.d/conda.sh
-conda activate mne
-
 # Exit on error
 set -e
 export OMP_NUM_THREADS=$THREADS VECLIB_MAXIMUM_THREADS=$THREADS
 export HDF5_USE_FILE_LOCKING=FALSE
 
+# Run the training command
+uv run state tx train \
+  data.kwargs.toml_config_path="${TOML_CONFIG}" \
+  data.kwargs.num_workers="${NUM_WORKERS}" \
+  data.kwargs.batch_col="batch_var" \
+  data.kwargs.pert_col="target_gene" \
+  data.kwargs.cell_type_key="cell_type" \
+  data.kwargs.control_pert="non-targeting" \
+  data.kwargs.perturbation_features_file="${PERT_FEATURES}" \
+  training.max_steps=4000 \
+  training.ckpt_every_n_steps=5000 \
+  training.val_freq=200 \
+  model=state_sm \
+  +model.kwargs.transformer_backbone.regularization=0.0 \
+  +model.kwargs.transformer_backbone_kwargs.resid_pdrop=0.0 \
+  +model.kwargs.transformer_backbone_kwargs.attn_pdrop=0.0 \
+  +model.kwargs.transformer_backbone_kwargs.embd_pdrop=0.0 \
+  model.kwargs.nb_decoder=true \
+  wandb.tags="[${NAME}]" \
+  output_dir="${MODEL_DIR}" \
+  name="${NAME}" \
+  use_wandb=false
+
+# -- Predict --
+# gets metrics.csv along with real and predicted adata from test holdouts
+uv run state tx predict \
+    --checkpoint "final.ckpt" \
+    --output_dir "${MODEL_DIR}/${NAME}/" \
+    --profile full
 
 
 uv run -m cell_eval score \
