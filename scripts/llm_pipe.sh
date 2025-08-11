@@ -17,7 +17,6 @@
   model=state_sm \
   wandb.tags="[first_run]" \
   output_dir="results/competition" \
-  name="all_genes_preprocessed_state_sm_esm2" \
-
-
-#data.kwargs.output_space="gene" \
+  name="hvgs_2_state_sm_esm2" \
+  data.kwargs.embed_key=X_hvg \
+  data.kwargs.output_space="gene" \
