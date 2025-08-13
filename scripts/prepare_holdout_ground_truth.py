@@ -275,28 +275,7 @@ def _read_state_h5_file(file_path: str, required_columns: List[str]) -> Optional
     
     try:
         with h5py.File(file_path, "r") as f:
-            # Load expression matrix (prefer X_hvg, fallback to X)
-            if f.get("obsm/X_hvg") is not None and isinstance(f["obsm/X_hvg"], h5py.Dataset):
-                X = f["obsm/X_hvg"][:]
-            elif f.get("X") is not None:
-                xnode = f["X"]
-                if isinstance(xnode, h5py.Dataset):
-                    X = xnode[:]
-                elif isinstance(xnode, h5py.Group) and all(k in xnode for k in ("data","indices","indptr","shape")):
-                    # CSR sparse matrix
-                    data = xnode["data"][:]
-                    indices = xnode["indices"][:]
-                    indptr = xnode["indptr"][:]
-                    shape = tuple(xnode["shape"][:])
-                    X = csr_matrix((data, indices, indptr), shape=shape)
-                else:
-                    logger.warning(f"Unsupported X layout in {file_path}")
-                    return None
-            else:
-                logger.warning(f"No X data found in {file_path}")
-                return None
-            
-            # Load observation metadata
+            # We need to get the dimensions of the dataset before we can read the data - the compset doesn't store shape
             obs_data = {}
             for col in required_columns:
                 try:
@@ -305,19 +284,42 @@ def _read_state_h5_file(file_path: str, required_columns: List[str]) -> Optional
                 except KeyError:
                     logger.warning(f"Required column '{col}' not found in {file_path}")
                     return None
+            n_obs = len(obs_data[required_columns[0]])
             
-            if X.shape[0] != len(obs_data[required_columns[0]]):
-                logger.warning(f"Shape mismatch in {file_path}")
-                return None
-            
-            # Load gene names
+            # Load gene names to get dimensions - we do this here so we can log it later. TODO: change when we do this when we are comfortable with its effectiveness
             gene_names = _read_gene_names(f)
             if gene_names is None:
                 logger.warning(f"No gene names found in {file_path}")
                 return None
-                
-            if len(gene_names) != X.shape[1]:
-                logger.warning(f"Gene count mismatch in {file_path}")
+            n_vars = len(gene_names)
+            
+            # Load expression matrix (prefer X_hvg, fallback to X)
+            if f.get("obsm/X_hvg") is not None and isinstance(f["obsm/X_hvg"], h5py.Dataset):
+                X = f["obsm/X_hvg"][:]
+            elif f.get("X") is not None:
+                xnode = f["X"]
+                if isinstance(xnode, h5py.Dataset):
+                    X = xnode[:]
+                elif isinstance(xnode, h5py.Group) and all(k in xnode for k in ("data","indices","indptr")):
+                    # CSR sparse matrix - infer shape if missing
+                    data = xnode["data"][:]
+                    indices = xnode["indices"][:]
+                    indptr = xnode["indptr"][:]
+                    if "shape" in xnode:
+                        shape = tuple(xnode["shape"][:])
+                    else:
+                        shape = (n_obs, n_vars)  # infer from obs/var dimensions
+                    X = csr_matrix((data, indices, indptr), shape=shape)
+                else:
+                    logger.warning(f"Unsupported X layout in {file_path}")
+                    return None
+            else:
+                logger.warning(f"No X data found in {file_path}")
+                return None
+            
+            # Validate dimensions
+            if X.shape[0] != n_obs or X.shape[1] != n_vars:
+                logger.warning(f"Shape mismatch in {file_path}: got {X.shape}, expected ({n_obs}, {n_vars})")
                 return None
             
             # Create AnnData
@@ -507,7 +509,7 @@ Example usage:
         logger.info("STEP 6: Generating summary and saving results")
         
         # Summary statistics
-        logger.info(f"FINAL SUMMARY:")
+        logger.info("FINAL SUMMARY:")
         logger.info(f"  Total perturbations requested: {total_requested}")
         logger.info(f"  Total perturbations found: {len(total_found_perts)}")
         logger.info(f"  Coverage: {len(total_found_perts)/total_requested*100:.1f}%")
