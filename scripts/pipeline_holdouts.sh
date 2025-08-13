@@ -102,6 +102,7 @@ uv run -m cell_eval run \
     -o ${OUT_DIR}/cell-eval-outdir-results \
     --pert-col target_gene \
     --control-pert non-targeting \
+    --skip-metrics pearson_edistance,clustering_agreement,discrimination_score_l2,discrimination_score_cosine \
     --num-threads ${THREADS} \
     --batch-size ${BATCH_SIZE}
 
@@ -112,6 +113,7 @@ uv run -m cell_eval run \
     -o ${OUT_DIR}/cell-eval-outdir-baseline \
     --pert-col target_gene \
     --control-pert non-targeting \
+    --skip-metrics pearson_edistance,clustering_agreement,discrimination_score_l2,discrimination_score_cosine \
     --num-threads ${THREADS} \
     --batch-size ${BATCH_SIZE}
 
