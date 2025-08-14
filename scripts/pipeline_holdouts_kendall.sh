@@ -11,6 +11,9 @@ DIR_NAME="kendall_test"
 # toml config path
 TOML_CONFIG="examples/fewshot.toml"
 
+# Competition support set
+COMPETITION_SUPPORT_SET="/raid/kreid/v_cell/competition_support_set"
+
 # perturbation features file
 PERT_FEATURES="/raid/kreid/v_cell/competition_support_set/ESM2_pert_features.pt"
 
@@ -35,23 +38,23 @@ export HDF5_USE_FILE_LOCKING=FALSE
 
 echo "#### Running training ####"
 
-# uv run state tx train \
-#   data.kwargs.toml_config_path=${TOML_CONFIG} \
-#   data.kwargs.num_workers=${NUM_WORKERS} \
-#   data.kwargs.batch_col=batch_var \
-#   data.kwargs.pert_col=target_gene \
-#   data.kwargs.cell_type_key=cell_type \
-#   data.kwargs.control_pert=non-targeting \
-#   data.kwargs.perturbation_features_file=${PERT_FEATURES} \
-#   training.max_steps=100 \
-#   training.ckpt_every_n_steps=500 \
-#   training.val_freq=250 \
-#   model=state_sm \
-#   model.kwargs.nb_decoder=true \
-#   wandb.tags=[${DIR_NAME}] \
-#   output_dir=${MODEL_DIR} \
-#   name=${DIR_NAME} \
-#   use_wandb=false
+uv run state tx train \
+  data.kwargs.toml_config_path=${TOML_CONFIG} \
+  data.kwargs.num_workers=${NUM_WORKERS} \
+  data.kwargs.batch_col=batch_var \
+  data.kwargs.pert_col=target_gene \
+  data.kwargs.cell_type_key=cell_type \
+  data.kwargs.control_pert=non-targeting \
+  data.kwargs.perturbation_features_file=${PERT_FEATURES} \
+  training.max_steps=100 \
+  training.ckpt_every_n_steps=500 \
+  training.val_freq=250 \
+  model=state_sm \
+  model.kwargs.nb_decoder=true \
+  wandb.tags=[${DIR_NAME}] \
+  output_dir=${MODEL_DIR} \
+  name=${DIR_NAME} \
+  use_wandb=false
 
 python scripts/prepare_holdout_ground_truth.py \
   --toml_config ${TOML_CONFIG} \
@@ -125,9 +128,9 @@ uv run state tx infer \
   --output ${MODEL_DIR}/${DIR_NAME}/competition_val_prediction.h5ad \
   --model_dir ${MODEL_DIR}/${DIR_NAME} \
   --checkpoint ${MODEL_DIR}/${DIR_NAME}/checkpoints/${CKPT} \
-  --adata competition_support_set/competition_val_template.h5ad \
+  --adata ${COMPETITION_SUPPORT_SET}/competition_val_template.h5ad \
   --pert_col target_gene
 
 echo "#### Running cell-eval prep ####"
-# remember to have `sudo apt install -y zstd` before running this
-uv tool run --from git+https://github.com/ArcInstitute/cell-eval@main cell-eval prep -i ${MODEL_DIR}/${DIR_NAME}/competition_val_prediction.h5ad -g competition_support_set/gene_names.csv
+# # remember to have `sudo apt install -y zstd` before running this
+# uv tool run --from git+https://github.com/ArcInstitute/cell-eval@main cell-eval prep -i ${MODEL_DIR}/${DIR_NAME}/competition_val_prediction.h5ad -g ${COMPETITION_SUPPORT_SET}/gene_names.csv
