@@ -16,3 +16,6 @@ competition_support_set/
 local_*.sh
 *outdir*
 *.h5ad
+competition_experiments/
+cell-eval*/
+old/
