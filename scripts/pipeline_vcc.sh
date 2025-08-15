@@ -6,10 +6,10 @@
 MODEL_DIR="competition"
 
 # experiment name
-DIR_NAME="training_finetune_andrew1"
+DIR_NAME="training_finetune_andrew04"
 
 # toml config path
-TOML_CONFIG="examples/andrew_fewshot.toml"
+TOML_CONFIG="examples/andrew_few.toml"
 
 # perturbation features file
 PERT_FEATURES="competition_support_set/ESM2_pert_features.pt"
@@ -42,32 +42,27 @@ uv run state tx train \
   data.kwargs.cell_type_key="cell_type" \
   data.kwargs.control_pert="non-targeting" \
   data.kwargs.perturbation_features_file="${PERT_FEATURES}" \
-  training.max_steps=4000 \
-  training.ckpt_every_n_steps=5000 \
-  training.val_freq=200 \
-  model=state_sm \
-  +model.kwargs.transformer_backbone.regularization=0.0 \
-  +model.kwargs.transformer_backbone_kwargs.resid_pdrop=0.0 \
-  +model.kwargs.transformer_backbone_kwargs.attn_pdrop=0.0 \
-  +model.kwargs.transformer_backbone_kwargs.embd_pdrop=0.0 \
-  model.kwargs.nb_decoder=true \
-  wandb.tags="[${NAME}]" \
+  training.max_steps=5000 \
+  training.ckpt_every_n_steps=500 \
+  training.val_freq=null \
+  model=duallosses \
+  wandb.tags="[${DIR_NAME}]" \
   output_dir="${MODEL_DIR}" \
-  name="${NAME}" \
+  name="${DIR_NAME}" \
   use_wandb=false
 
 # -- Predict --
 # gets metrics.csv along with real and predicted adata from test holdouts
 uv run state tx predict \
     --checkpoint "final.ckpt" \
-    --output_dir "${MODEL_DIR}/${NAME}/" \
+    --output_dir "${MODEL_DIR}/${DIR_NAME}/" \
     --profile full
 
 
 uv run -m cell_eval score \
-    -i ${OUT_DIR}/cell-eval-outdir-results/agg_results.csv \
-    -I ${OUT_DIR}/cell-eval-outdir-baseline/agg_results.csv \
-    -o ${OUT_DIR}/baseline_diff_test.csv
+    -i ${OUT_DIR}/${DIR_NAME}/cell-eval-outdir-results/agg_results.csv \
+    -I ${OUT_DIR}/${DIR_NAME}/cell-eval-outdir-baseline/agg_results.csv \
+    -o ${OUT_DIR}/${DIR_NAME}/baseline_diff_test.csv
 
 echo "#### Running cell-eval prep ####"
 # remember to have `sudo apt install -y zstd` before running this
