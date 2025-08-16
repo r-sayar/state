@@ -6,7 +6,7 @@
 MODEL_DIR="competition"
 
 # experiment name
-DIR_NAME="dyno001"
+DIR_NAME="dyno003"
 
 # toml config path
 TOML_CONFIG="examples/andrew_few.toml"
@@ -42,6 +42,7 @@ uv run state tx train \
   data.kwargs.cell_type_key="cell_type" \
   data.kwargs.control_pert="non-targeting" \
   data.kwargs.perturbation_features_file="${PERT_FEATURES}" \
+  training.batch_size=8 \
   training.max_steps=50000 \
   training.ckpt_every_n_steps=2500 \
   training.val_freq=null \
