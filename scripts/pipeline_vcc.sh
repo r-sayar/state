@@ -6,7 +6,7 @@
 MODEL_DIR="competition"
 
 # experiment name
-DIR_NAME="training_finetune_andrew04"
+DIR_NAME="dyno001"
 
 # toml config path
 TOML_CONFIG="examples/andrew_few.toml"
@@ -42,10 +42,10 @@ uv run state tx train \
   data.kwargs.cell_type_key="cell_type" \
   data.kwargs.control_pert="non-targeting" \
   data.kwargs.perturbation_features_file="${PERT_FEATURES}" \
-  training.max_steps=5000 \
-  training.ckpt_every_n_steps=500 \
+  training.max_steps=50000 \
+  training.ckpt_every_n_steps=2500 \
   training.val_freq=null \
-  model=duallosses \
+  model=dynoloss \
   wandb.tags="[${DIR_NAME}]" \
   output_dir="${MODEL_DIR}" \
   name="${DIR_NAME}" \
