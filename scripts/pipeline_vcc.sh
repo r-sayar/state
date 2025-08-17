@@ -6,7 +6,7 @@
 MODEL_DIR="competition"
 
 # experiment name
-DIR_NAME="dyno003"
+DIR_NAME="dyno005"
 
 # toml config path
 TOML_CONFIG="examples/andrew_few.toml"
@@ -45,7 +45,11 @@ uv run state tx train \
   training.batch_size=8 \
   training.max_steps=50000 \
   training.ckpt_every_n_steps=2500 \
-  training.val_freq=null \
+  training.val_freq=500 \
+  training.lr=1e-4 \
+  +training.lr_scheduler="StepLR" \
+  +training.lr_step_size=500 \
+  +training.lr_gamma=0.9 \
   model=dynoloss \
   wandb.tags="[${DIR_NAME}]" \
   output_dir="${MODEL_DIR}" \
