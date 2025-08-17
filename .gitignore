@@ -19,3 +19,9 @@ local_*.sh
 competition_experiments/
 cell-eval*/
 old/
+wandb/
+wandb_logs/
+*.ckpt
+readable_trainings.log
+_readable_trainings.log
+.venv/

@@ -1,25 +1,14 @@
 import argparse as ap
 
 from omegaconf import DictConfig, OmegaConf
-from ...tx.callbacks.cell_eval_callback import CellEvalCallback
+
 
 def add_arguments_train(parser: ap.ArgumentParser):
     # Allow remaining args to be passed through to Hydra
     parser.add_argument("hydra_overrides", nargs="*", help="Hydra configuration overrides (e.g., data.batch_size=32)")
     # Add custom help handler 
     parser.add_argument("--help", "-h", action="store_true", help="Show configuration help with all parameters")
-    # New: Cell-eval args
-    parser.add_argument("--eval_during_training", action="store_true", 
-                       help="Enables cell evaluation during training")
-    parser.add_argument("--eval_every_n_steps", type=int, default=500,
-                       help="Cell-eval Evaluation every N steps (default: 500)")
-    parser.add_argument("--pred_data_path", type=str,
-                       help="Path to evaluation test data (.h5ad)")
-    parser.add_argument("--real_data_path", type=str,
-                       help="Path to the control template for evaluation (.h5ad)")
-    parser.add_argument("--eval_metrics", nargs='+', 
-                       default=['mse', 'pearson', 'spearman'],
-                       help="Evaluation metrics for cell-eval")
+
 
 def run_tx_train(cfg: DictConfig):
     import json
@@ -37,7 +26,7 @@ def run_tx_train(cfg: DictConfig):
     from lightning.pytorch.loggers import WandbLogger
     from lightning.pytorch.plugins.precision import MixedPrecision
 
-    from ...tx.callbacks import BatchSpeedMonitorCallback
+    from ...tx.callbacks import BatchSpeedMonitorCallback, ScheduledFinetuningCallback
     from ...tx.utils import get_checkpoint_callbacks, get_lightning_module, get_loggers
 
     logger = logging.getLogger(__name__)
@@ -210,31 +199,6 @@ def run_tx_train(cfg: DictConfig):
     batch_speed_monitor = BatchSpeedMonitorCallback()
     callbacks = ckpt_callbacks + [batch_speed_monitor]
     
-    # Buchi eval  start
-    
-    # NEU: Cell-eval Callback hinzufügen (falls konfiguriert)
-    if cfg.get("cell_eval", {}).get("enabled", False):
-    #if cfg["cell_eval"]["enabled"]:
-        cell_eval_callback = CellEvalCallback(
-            eval_every_n_steps=cfg["cell_eval"].get("eval_every_n_steps", 500),
-            #pred_data_path=cfg["cell_eval"]["pred_data_path"],
-            #real_data_path=cfg["cell_eval"]["real_data_path"],
-            control_pert=cfg["data"]["kwargs"]["control_pert"],
-            pert_col=cfg["data"]["kwargs"]["pert_col"],
-            eval_metrics=cfg["cell_eval"].get("eval_metrics", ["mse", "pearson", "spearman"]),
-            output_dir=run_output_dir,
-            profile="minimal", 
-            save_predictions=cfg["cell_eval"].get("save_predictions", True),
-            log_to_wandb=cfg["use_wandb"],
-            verbose=cfg["cell_eval"].get("verbose", True)
-        )
-        #callbacks.append(cell_eval_callback)
-        callbacks = ckpt_callbacks + [cell_eval_callback]
-        logger.info("Cell-eval Callback added")
-        
-
-    # Buchi eval end
-    
     # Add ScheduledFinetuningCallback if finetuning schedule is specified in the config
     finetuning_schedule = cfg["training"].get("finetuning_schedule", None)
     if finetuning_schedule and finetuning_schedule.get("enable", False):
@@ -284,7 +248,7 @@ def run_tx_train(cfg: DictConfig):
     )
 
     # If it's SimpleSum, override to do exactly 1 epoch, ignoring `max_steps`.
-    if cfg["model"]["name"].lower() == "celltypemean" or cfg["model"]["name"].lower() == "globalsimplesum":
+    if cfg["model"]["name"].lower() == "celltypemean" or cfg["model"]["name"].lower() == "globalsimplesum" or cfg["model"]["name"].lower() == "perturb_mean" or cfg["model"]["name"].lower() == "context_mean":
         trainer_kwargs["max_epochs"] = 1  # do exactly one epoch
         # delete max_steps to avoid conflicts
         del trainer_kwargs["max_steps"]
@@ -300,17 +264,6 @@ def run_tx_train(cfg: DictConfig):
         checkpoint_path = None
     else:
         logging.info(f"!! Resuming training from {checkpoint_path} !!")
-    # print(f"Buchi, why model=cpu: {next(model.parameters()).device}")
-    if torch.mps.is_available():
-        print(f"Model device: {next(model.parameters()).device}")
-        print(f"METAL memory allocated: {torch.mps.memory_allocated() / 1024**3:.2f} GB")
-        print(f"METAL memory reserved: {torch.mps.memory_reserved() / 1024**3:.2f} GB")
-
-    else:    
-        print(f"Model device: {next(model.parameters()).device}")
-        print(f"CUDA memory allocated: {torch.cuda.memory_allocated() / 1024**3:.2f} GB")
-        print(f"CUDA memory reserved: {torch.cuda.memory_reserved() / 1024**3:.2f} GB")
-    
     
     logger.info("Starting trainer fit.")
 
@@ -320,7 +273,12 @@ def run_tx_train(cfg: DictConfig):
     if checkpoint_path is None and manual_init is not None:
         print(f"Loading manual checkpoint from {manual_init}")
         checkpoint_path = manual_init
-        device = torch.device("cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu")
+        if torch.cuda.is_available():
+            device = torch.device("cuda")
+        elif torch.backends.mps.is_available():
+            device = torch.device("mps")
+        else:
+            device = torch.device("cpu")
         checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
         model_state = model.state_dict()
         checkpoint_state = checkpoint["state_dict"]

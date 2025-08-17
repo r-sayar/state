@@ -379,7 +379,8 @@ def run_tx_predict(args: ap.ArgumentParser):
                 batch_size=2048,
             )
 
-            evaluator.compute(
+            # Buchi add results
+            (results, agg_results) = evaluator.compute(
                 profile=args.profile,
                 metric_configs={
                     "discrimination_score": {
@@ -400,3 +401,5 @@ def run_tx_predict(args: ap.ArgumentParser):
                 else {},
                 skip_metrics=["pearson_edistance", "clustering_agreement"],
             )
+
+            return (results, agg_results)
