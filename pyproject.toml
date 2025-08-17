@@ -3,7 +3,7 @@ allow-direct-references = true
 
 [project]
 name = "arc-state"
-version = "0.9.13"
+version = "0.9.14"
 description = "State is a machine learning model that predicts cellular perturbation response across diverse contexts."
 readme = "README.md"
 authors = [
