@@ -376,11 +376,10 @@ def run_tx_predict(args: ap.ArgumentParser):
                 outdir=results_dir,
                 prefix=ct,
                 pdex_kwargs=pdex_kwargs,
-                batch_size=2048,
-                score_mode=True
+                batch_size=2048,                
             )
 
-            # Buchi add results and score_mode=True above
+            # Buchi add results
             (results, agg_results) = evaluator.compute(
                 profile=args.profile,
                 metric_configs={
