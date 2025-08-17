@@ -377,9 +377,10 @@ def run_tx_predict(args: ap.ArgumentParser):
                 prefix=ct,
                 pdex_kwargs=pdex_kwargs,
                 batch_size=2048,
+                score_mode=True
             )
 
-            # Buchi add results
+            # Buchi add results and score_mode=True above
             (results, agg_results) = evaluator.compute(
                 profile=args.profile,
                 metric_configs={
@@ -399,7 +400,7 @@ def run_tx_predict(args: ap.ArgumentParser):
                 }
                 if data_module.embed_key and data_module.embed_key != "X_hvg"
                 else {},
-                skip_metrics=["pearson_edistance", "clustering_agreement"],
+                skip_metrics=["pearson_edistance", "clustering_agreement"],                
             )
 
             return (results, agg_results)
