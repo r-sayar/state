@@ -1,9 +1,9 @@
 #!/bin/bash
 
 # Run the inference command
-# NOTE: model_dir looks for a ./final.ckpt to infer on
+# NOTE: model_dir looks for a ./checkpoints/final.ckpt to infer on
 uv run state tx infer \
-  --model_dir "path/to/models/dir" \
-  --adata "path/to/competition_val_template.h5ad" \
-  --output "path/to/your/prediction/file.h5ad" \
+  --model_dir "competition/dyno005" \
+  --adata "competition_support_set/competition_val_template.h5ad" \
+  --output "competition/dyno005/prediction.h5ad" \
   --pert_col "target_gene"
