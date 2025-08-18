@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy as np
 from ..._cli._tx._predict import run_tx_predict, add_arguments_predict
+from cell_eval import score_agg_metrics
 import argparse
 import logging
 import os
@@ -44,7 +45,7 @@ class CellEvalCallback(Callback):
         log_to_wandb: bool = True,
         verbose: bool = True,
         temp_checkpoint_name: str = "temp_eval_checkpoint.ckpt",
-        profile: str = "minimal"  # For faster evaluation
+        profile: str = "minimal",  # For faster evaluation        
     ):
         super().__init__()
         
@@ -63,6 +64,7 @@ class CellEvalCallback(Callback):
         self.verbose = verbose
         self.temp_checkpoint_name = temp_checkpoint_name
         self.profile = profile
+        self.agg_baseline = None
         
         # Evaluation history
         self.results_history = []  # list of all results DataFrames
@@ -91,6 +93,8 @@ class CellEvalCallback(Callback):
 
             self.cell_eval_available = True
             
+             
+        
             #if self.pred_data_path and self.real_data_path:
             #    self.eval_enabled = True
             #    logger.info(f"Cell-eval callback enabled - Evaluation every{self.eval_every_n_steps} steps")
@@ -532,6 +536,18 @@ class CellEvalCallback(Callback):
         shutil.copy2(checkpoint_path, expected_checkpoint_path)
         
         try:
+            # call cell_eval baseline
+            if self.agg_baseline is None:                
+                logger.info("call Cell-eval baseline.")
+                # create mock arguments
+                args = MockArgs(
+                    output_dir=self.output_dir,
+                    checkpoint=expected_checkpoint_path,                
+                    profile="vcc",
+                    predict_only=False
+                )
+                res_baseline, self.agg_baseline = run_tx_predict(args)
+                logger.info(f"Cell-eval baseline results: {self.agg_baseline}")
             # create mock arguments
             args = MockArgs(
                 output_dir=self.output_dir,
@@ -711,6 +727,15 @@ class CellEvalCallback(Callback):
                 #if agg_results is not None and self.log_to_wandb:
                 #    self._log_metrics(trainer, agg_results)
                 
+                # run score
+                score_filename = "score_step_" + str(self.eval_counter) + ".csv"
+                score_agg_metrics(
+                    results_user=agg_results,
+                    results_base=self.agg_baseline,                    
+                    output=os.path.join(self.output_dir, score_filename)
+                )
+                logger.info(f"Buchi calc score_agg_metrics in step: {self.eval_counter}")
+    
                 # Create plots (all N evaluations)
                 if self.eval_counter % self.plot_every_n_evals == 0:
                     logger.info(f"Creating evaluation plots (eval #{self.eval_counter})")

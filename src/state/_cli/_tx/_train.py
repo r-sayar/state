@@ -1,7 +1,9 @@
 import argparse as ap
+import os
 
 from omegaconf import DictConfig, OmegaConf
 from ...tx.callbacks.cell_eval_callback import CellEvalCallback
+from ._predict import run_tx_predict
 
 def add_arguments_train(parser: ap.ArgumentParser):
     # Allow remaining args to be passed through to Hydra
@@ -211,10 +213,20 @@ def run_tx_train(cfg: DictConfig):
     callbacks = ckpt_callbacks + [batch_speed_monitor]
     
     # Buchi eval  start
-    
+    # Create arguments for run_tx_predict
+    class MockArgs:
+        def __init__(self, output_dir, checkpoint, profile="minimal", predict_only=False):
+            self.output_dir = output_dir
+            if checkpoint is None:
+                checkpoint = cfg["model"]["kwargs"].get("init_from", None)
+            self.checkpoint = checkpoint # only filename
+            self.test_time_finetune = 0  # No fine-tuning during training
+            self.profile = profile
+            self.predict_only = predict_only
     # NEU: Cell-eval Callback hinzufügen (falls konfiguriert)
     if cfg.get("cell_eval", {}).get("enabled", False):
     #if cfg["cell_eval"]["enabled"]:
+        logger.info("set CellEvalCallback with baseline.")
         cell_eval_callback = CellEvalCallback(
             eval_every_n_steps=cfg["cell_eval"].get("eval_every_n_steps", 500),
             #pred_data_path=cfg["cell_eval"]["pred_data_path"],
@@ -226,7 +238,7 @@ def run_tx_train(cfg: DictConfig):
             profile="minimal", 
             save_predictions=cfg["cell_eval"].get("save_predictions", True),
             log_to_wandb=cfg["use_wandb"],
-            verbose=cfg["cell_eval"].get("verbose", True)
+            verbose=cfg["cell_eval"].get("verbose", True),            
         )
         #callbacks.append(cell_eval_callback)
         callbacks = ckpt_callbacks + [cell_eval_callback]
