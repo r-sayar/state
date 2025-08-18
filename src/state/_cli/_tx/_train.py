@@ -108,12 +108,12 @@ def run_tx_train(cfg: DictConfig):
         cfg["data"]["kwargs"],
         batch_size=cfg["training"]["batch_size"],
         cell_sentence_len=sentence_len,
+        exclude_datasets=["competition_val_template"],
     )
 
     with open(join(run_output_dir, "data_module.torch"), "wb") as f:
         # TODO-Abhi: only save necessary data
         data_module.save_state(f)
-
     data_module.setup(stage="fit")
     dl = data_module.train_dataloader()
     print("num_workers:", dl.num_workers)
