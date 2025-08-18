@@ -49,7 +49,7 @@ uv run state tx train \
   training.lr=1e-4 \
   +training.lr_scheduler="StepLR" \
   +training.lr_step_size=500 \
-  +training.lr_gamma=0.9 \
+  +training.lr_gamma=0.95 \
   model=dynoloss \
   wandb.tags="[${DIR_NAME}]" \
   output_dir="${MODEL_DIR}" \
