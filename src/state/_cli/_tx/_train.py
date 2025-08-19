@@ -238,6 +238,16 @@ def run_tx_train(cfg: DictConfig):
             profile="minimal", 
             save_predictions=cfg["cell_eval"].get("save_predictions", True),
             log_to_wandb=cfg["use_wandb"],
+            primary_metric="discrimination_score_l1",  # Hauptmetrik
+            metric_weights={
+                "discrimination_score_l1": 1.0,  # 2.0 Doppeltes Gewicht
+                "overlap_at_N": 1.0,  # 1.5
+                "mae": 1.0,
+                "avg_score": 1.0
+            },
+            improvement_threshold=0.001,  # Mindestverbesserung
+            save_best_checkpoint=True,
+            baseline_comparison=True,  # from_baseline Modus
             verbose=cfg["cell_eval"].get("verbose", True),            
         )
         #callbacks.append(cell_eval_callback)
