@@ -66,7 +66,7 @@ class CellEvalCallback(Callback):
         #self.real_data_path = real_data_path
         self.control_pert = control_pert
         self.pert_col = pert_col
-        self.eval_metrics = eval_metrics or ['overlap_at_N', 'mae', 'discrimination_score_l1']
+        #self.eval_metrics = ['overlap_at_N', 'mae', 'discrimination_score_l1']
         self.output_dir = Path(output_dir) if output_dir else None
         self.save_predictions = save_predictions
         self.log_to_wandb = log_to_wandb

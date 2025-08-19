@@ -22,6 +22,6 @@ old/
 wandb/
 wandb_logs/
 *.ckpt
-readable_trainings.log
-_readable_trainings.log
+readable_training.log
+_readable_training.log
 .venv/

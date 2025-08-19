@@ -212,7 +212,7 @@ def run_tx_train(cfg: DictConfig):
     batch_speed_monitor = BatchSpeedMonitorCallback()
     callbacks = ckpt_callbacks + [batch_speed_monitor]
     
-    # Buchi eval  start
+    # Buchi eval start
     # Create arguments for run_tx_predict
     class MockArgs:
         def __init__(self, output_dir, checkpoint, profile="minimal", predict_only=False):
@@ -233,7 +233,7 @@ def run_tx_train(cfg: DictConfig):
             #real_data_path=cfg["cell_eval"]["real_data_path"],
             control_pert=cfg["data"]["kwargs"]["control_pert"],
             pert_col=cfg["data"]["kwargs"]["pert_col"],
-            eval_metrics=cfg["cell_eval"].get("eval_metrics", ["mse", "pearson", "spearman"]),
+            #eval_metrics=cfg["cell_eval"].get("eval_metrics", ['overlap_at_N', 'mae', 'discrimination_score_l1']),
             output_dir=run_output_dir,
             profile="minimal", 
             save_predictions=cfg["cell_eval"].get("save_predictions", True),
