@@ -281,6 +281,7 @@ def run_tx_train(cfg: DictConfig):
                 else:  # output_space == "all"
                     new_gene_dim = var_dims.get("gene_dim", 2000)
                 
+                logger.info(f"New gene dimension for output_space='{current_output_space}': {new_gene_dim}")
                 new_decoder_cfg = dict(
                     latent_dim=var_dims["output_dim"],
                     gene_dim=new_gene_dim,
