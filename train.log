@@ -1,0 +1,72 @@
+[INFO] Seed set to 42
+[WARNING] Dataset path does not exist: /raid/kreid/v_cell/competition_support_set/{competition_train,k562_gwps,rpe1,jurkat,k562,hepg2}.h5
+[INFO] Configuration validation passed
+[INFO] Initializing DataModule: batch_size=16, workers=4, random_seed=42
+[INFO] Seed set to 42
+[WARNING] Dataset path does not exist: /raid/kreid/v_cell/competition_support_set/{competition_train,k562_gwps,rpe1,jurkat,k562,hepg2}.h5
+[INFO] Configuration validation passed
+[INFO] Initializing DataModule: batch_size=16, workers=4, random_seed=42
+[INFO] Loaded custom perturbation featurizations for 19790 perturbations.
+[INFO] Saved data module configuration to <_io.BufferedWriter name='competition/first_run/data_module.torch'>
+[INFO] Processing dataset replogle_h1:
+[INFO]   - Training dataset: True
+[INFO]   - Zeroshot cell types: []
+[INFO]   - Fewshot cell types: ['ARC_H1']
+[INFO] 
+
+[INFO] Done! Train / Val / Test splits: 0 / 0 / 0
+[INFO] Seed set to 42
+[INFO] Configuration validation passed
+[INFO] Initializing DataModule: batch_size=16, workers=4, random_seed=42
+[INFO] Set 2 missing perturbations to zero vectors.
+[INFO] Loaded custom perturbation featurizations for 19792 perturbations.
+[INFO] Saved data module configuration to <_io.BufferedWriter name='competition/first_run/data_module.torch'>
+[INFO] Processing dataset replogle_h1:
+[INFO]   - Training dataset: True
+[INFO]   - Zeroshot cell types: []
+[INFO]   - Fewshot cell types: ['ARC_H1', 'hepg2', 'jurkat', 'k562', 'rpe1']
+[WARNING] No cell barcode information found in competition_support_set/hepg2.h5. Generating generic barcodes.
+[WARNING] No cell barcode information found in competition_support_set/jurkat.h5. Generating generic barcodes.
+[WARNING] No cell barcode information found in competition_support_set/k562.h5. Generating generic barcodes.
+[WARNING] No cell barcode information found in competition_support_set/k562_gwps.h5. Generating generic barcodes.
+[WARNING] No cell barcode information found in competition_support_set/rpe1.h5. Generating generic barcodes.
+[INFO] 
+
+[INFO] Done! Train / Val / Test splits: 7 / 6 / 6
+[INFO] Creating perturbation batch sampler with metadata caching (using codes)...
+[INFO] Total # cells 383508. Cell set size mean / std before resampling: 118.59 / 27.13.
+[INFO] Creating meta-batches with cell_sentence_len=128...
+[INFO] Of all batches, 2780 were full and 454 were partial.
+[INFO] Sampler created with 203 batches in 0.22 seconds.
+[INFO] Loggers and callbacks set up.
+[INFO] GPU available: True (mps), used: True
+[INFO] TPU available: False, using: 0 TPU cores
+[INFO] HPU available: False, using: 0 HPUs
+[INFO] Starting trainer fit.
+[INFO] 
+  | Name                 | Type                    | Params | Mode 
+-------------------------------------------------------------------------
+0 | loss_fn              | SamplesLoss             | 0      | train
+1 | pert_encoder         | Sequential              | 4.8 M  | train
+2 | basal_encoder        | Linear                  | 12.2 M | train
+3 | transformer_backbone | LlamaBidirectionalModel | 50.4 M | train
+4 | project_out          | Sequential              | 13.5 M | train
+5 | final_down_then_up   | Sequential              | 81.7 M | train
+6 | relu                 | ReLU                    | 0      | train
+-------------------------------------------------------------------------
+141 M     Trainable params
+21.5 M    Non-trainable params
+162 M     Total params
+650.506   Total estimated model params size (MB)
+86        Modules in train mode
+0         Modules in eval mode
+[INFO] Creating perturbation batch sampler with metadata caching (using codes)...
+[INFO] Total # cells 64511. Cell set size mean / std before resampling: 113.58 / 32.43.
+[INFO] Creating meta-batches with cell_sentence_len=128...
+[INFO] Of all batches, 448 were full and 120 were partial.
+[INFO] Sampler created with 36 batches in 0.03 seconds.
+[INFO] Creating perturbation batch sampler with metadata caching (using codes)...
+[INFO] Total # cells 383508. Cell set size mean / std before resampling: 118.59 / 27.13.
+[INFO] Creating meta-batches with cell_sentence_len=128...
+[INFO] Of all batches, 2780 were full and 454 were partial.
+[INFO] Sampler created with 203 batches in 0.23 seconds.

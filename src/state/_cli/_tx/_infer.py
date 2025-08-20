@@ -73,7 +73,19 @@ def run_tx_infer(args):
 
     # Load model
     logger.info(f"Loading model from checkpoint: {checkpoint_path}")
-    model = StateTransitionPerturbationModel.load_from_checkpoint(checkpoint_path)
+    # here to eval() was:  model = StateTransitionPerturbationModel.load_from_checkpoint(checkpoint_path)
+    # need somthing else to deal with shape mismatch though
+    model_kwargs = cfg['model']['kwargs']
+
+    # 3. Instantiate the model with the correct architecture first
+    print("INFO: Re-instantiating model with loaded hyperparameters...")
+    model = StateTransitionPerturbationModel(**model_kwargs)
+
+    # 4. Load the weights from the checkpoint into the correctly-structured model
+    print(f"INFO: Loading weights from checkpoint: {checkpoint_path}")
+    # Use weights_only=False because your hparams contain numpy types
+    checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
+    model.load_state_dict(checkpoint['state_dict'])
     model.eval()
     cell_sentence_len = model.cell_sentence_len
     device = next(model.parameters()).device

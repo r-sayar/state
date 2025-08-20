@@ -4,7 +4,9 @@ from typing import Dict, Optional
 import anndata as ad
 import numpy as np
 import torch
+import torch.optim as optim
 import torch.nn as nn
+from torch.optim.lr_scheduler import StepLR, ExponentialLR, CosineAnnealingLR
 
 from geomloss import SamplesLoss
 from typing import Tuple
@@ -152,6 +154,10 @@ class StateTransitionPerturbationModel(PerturbationModel):
         self.decoder_loss_weight = kwargs.get("decoder_weight", 1.0)
         self.regularization = kwargs.get("regularization", 0.0)
         self.detach_decoder = kwargs.get("detach_decoder", False)
+        self.lr_scheduler = kwargs.get("lr_scheduler", "StepLR")
+        self.lr_step_size = kwargs.get("lr_step_size", 200)
+        self.lr_gamma = kwargs.get("lr_gamma", 0.95)
+        self.weight_decay = kwargs.get("weight_decay", 0.0)
 
         self.transformer_backbone_key = transformer_backbone_key
         self.transformer_backbone_kwargs = transformer_backbone_kwargs
@@ -639,3 +645,23 @@ class StateTransitionPerturbationModel(PerturbationModel):
             output_dict["pert_cell_counts_preds"] = pert_cell_counts_preds
 
         return output_dict
+
+    def configure_optimizers(self):
+        """Configure optimizer with optional learning rate scheduling and weight decay."""
+        optimizer = optim.Adam(
+            self.parameters(), 
+            lr=self.lr, 
+            weight_decay=self.weight_decay
+        )
+        print(f"Using {self.lr_scheduler} scheduler")
+        if self.lr_scheduler == "StepLR":
+            scheduler = StepLR(optimizer, step_size=self.lr_step_size, gamma=self.lr_gamma)
+            return [optimizer], [scheduler]
+        elif self.lr_scheduler == "ExponentialLR":
+            scheduler = ExponentialLR(optimizer, gamma=self.lr_gamma)
+            return [optimizer], [scheduler]
+        elif self.lr_scheduler == "CosineAnnealingLR":
+            scheduler = CosineAnnealingLR(optimizer, T_max=self.lr_step_size)
+            return [optimizer], [scheduler]
+        else:
+            return optimizer
