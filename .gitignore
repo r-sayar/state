@@ -13,4 +13,5 @@ datasets/
 
 
 wandb/
+wandb_logs/
 results/
