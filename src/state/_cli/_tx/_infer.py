@@ -232,19 +232,11 @@ def run_tx_infer(args):
     # Concatenate all predictions
     preds_np = np.concatenate(all_preds, axis=0)
 
-    # Only assign predictions to HVGs to avoid dimension mismatch
-    if "highly_variable" in adata.var.columns:
-        hvg_mask = adata.var["highly_variable"].values
-        if preds_np.shape[1] == hvg_mask.sum():
-            adata.X[:, hvg_mask] = preds_np
-        else:
-            raise ValueError(f"Prediction shape {preds_np.shape} does not match number of HVGs ({hvg_mask.sum()})")
+    if args.embed_key in adata.obsm:
+        adata.obsm[args.embed_key] = preds_np
     else:
-        raise ValueError("AnnData does not contain 'highly_variable' column in .var")
-
-    # Optionally, store the full predictions in a new layer
-    adata.layers["preds_hvg"] = preds_np
-
+        adata.X = preds_np
+        
     output_path = args.output or args.adata.replace(".h5ad", "_with_preds.h5ad")
     adata.write_h5ad(output_path)
     logger.info(f"Saved predictions to {output_path} (in adata.X for HVGs and in .layers['preds_hvg'])")
