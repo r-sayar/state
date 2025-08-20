@@ -25,3 +25,5 @@ results/
 readable_trainings.log
 _readable_trainings.log
 .venv/
+.*
+assets/
