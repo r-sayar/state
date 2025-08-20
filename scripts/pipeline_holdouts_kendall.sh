@@ -5,7 +5,7 @@
 # Path to your trained model directory
 MODEL_DIR="competition"
 
-# experiment name
+# experiment name / Path to your trained model directory where your models are
 DIR_NAME="kendall_test"
 
 # toml config path
