@@ -58,11 +58,13 @@ uv run state tx train \
 
 # -- Predict --
 # gets metrics.csv along with real and predicted adata from test holdouts
-uv run state tx predict \
-    --checkpoint "final.ckpt" \
-    --output_dir "${MODEL_DIR}/${DIR_NAME}/" \
-    --profile vcc
-
+uv run state tx infer \
+  --output ${MODEL_DIR}/${DIR_NAME}/${PREDICTION_NAME}.h5ad \
+  --model_dir ${MODEL_DIR}/${DIR_NAME} \
+  --checkpoint ${MODEL_DIR}/${DIR_NAME}/checkpoints/${CKPT} \
+  --adata ${COMPETITION_SUPPORT_SET}/competition_val_template.h5ad \
+  --pert_col target_gene
+  
 echo "#### Running cell-eval prep ####"
 # remember to have `sudo apt install -y zstd` before running this
 uv tool run --from git+https://github.com/ArcInstitute/cell-eval@main cell-eval prep -i ${MODEL_DIR}/${DIR_NAME}/${PREDICTION_NAME}.h5ad -g competition_support_set/gene_names.csv
