@@ -36,6 +36,25 @@ set -e
 export OMP_NUM_THREADS=$THREADS VECLIB_MAXIMUM_THREADS=$THREADS
 export HDF5_USE_FILE_LOCKING=FALSE
 
+
+# Copy this script into the model directory for reproducibility
+DEST_DIR="${MODEL_DIR}/${DIR_NAME}"
+mkdir -p "$DEST_DIR"
+
+# Path of the currently running script (works when executed or sourced)
+SRC="${BASH_SOURCE[0]:-$0}"
+
+# Resolve to an absolute path if possible
+if command -v realpath >/dev/null 2>&1; then
+  SRC_ABS=$(realpath "$SRC")
+elif command -v readlink >/dev/null 2>&1; then
+  SRC_ABS=$(readlink -f "$SRC" 2>/dev/null || printf "%s" "$SRC")
+else
+  SRC_ABS="$SRC"
+fi
+
+cp -a "$SRC_ABS" "$DEST_DIR/" || cp -a "$SRC" "$DEST_DIR/"
+
 echo "#### Running training ####"
 
 uv run state tx train \
