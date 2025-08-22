@@ -465,7 +465,10 @@ class StateTransitionPerturbationModel(PerturbationModel):
                     latent_preds = pred.detach()
             else:
                 latent_preds = pred
-
+            # Add batch concatenation like PseudobulkPerturbationModel
+            batch_var = batch["batch"].reshape(latent_preds.shape[0], latent_preds.shape[1], -1)
+            if self.batch_dim is not None and isinstance(self.gene_decoder, NBDecoder):
+               latent_preds = torch.cat([latent_preds, batch_var], dim=-1)
             if isinstance(self.gene_decoder, NBDecoder):
                 mu, theta = self.gene_decoder(latent_preds)
                 gene_targets = batch["pert_cell_counts"].reshape_as(mu)
@@ -637,7 +640,25 @@ class StateTransitionPerturbationModel(PerturbationModel):
 
         if self.gene_decoder is not None:
             if isinstance(self.gene_decoder, NBDecoder):
-                mu, _ = self.gene_decoder(latent_output)
+                decoder_input = latent_output
+                if self.batch_dim is not None:
+                    # latent_output [S, 18080] -> [1, S, 18080]
+                    seq_len = latent_output.shape[0]
+                    latent_reshaped = latent_output.reshape(1, seq_len, -1)
+
+                    b = batch["batch"]
+                    if b.dim() == 1:  # [S] indices
+                        one_hot = torch.nn.functional.one_hot(b, num_classes=self.batch_dim).float().unsqueeze(0)  # [1,S,530]
+                    elif b.dim() == 2 and b.size(0) == 1:  # [1,S] indices
+                        one_hot = torch.nn.functional.one_hot(b.squeeze(0), num_classes=self.batch_dim).float().unsqueeze(0)
+                    elif b.dim() == 3 and b.size(-1) == self.batch_dim:  # already one‑hot
+                        one_hot = b.float()
+                    else:
+                        raise ValueError("Invalid batch tensor shape for decoder concatenation")
+
+                    # Concatenate along feature axis and flatten back for the decoder: [1,S,(18080+530)] -> [S,18610]
+                    decoder_input = torch.cat([latent_reshaped, one_hot], dim=-1).reshape(-1, latent_reshaped.size(-1) + self.batch_dim)
+                mu, _ = self.gene_decoder(decoder_input)
                 pert_cell_counts_preds = mu
             else:
                 pert_cell_counts_preds = self.gene_decoder(latent_output)

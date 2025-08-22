@@ -212,12 +212,14 @@ def run_tx_infer(args):
                 # Extend perturbation names
                 pert_names_batch.extend([control_pert] * padding_size)
 
-            # Prepare batch - use same format as working code
+            # Create batch index tensor (shape [S], dtype long). Use 0 as neutral reference batch.
+            batch_indices = torch.zeros(cell_sentence_len, dtype=torch.long, device=device)
+
             batch = {
                 "ctrl_cell_emb": X_batch,
-                "pert_emb": pert_batch,  # Keep as 2D tensor
+                "pert_emb": pert_batch,
                 "pert_name": pert_names_batch,
-                "batch": torch.zeros((1, cell_sentence_len), device=device),  # Use (1, cell_sentence_len)
+                "batch": batch_indices,  # indices, not a 2D zeros array
             }
 
             # Run inference on batch using padded=False like in working code

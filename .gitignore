@@ -18,8 +18,12 @@ competition_experiments/
 cell-eval*/
 old/
 datasets/
-
-
 wandb/
 wandb_logs/
 results/
+*.ckpt
+readable_trainings.log
+_readable_trainings.log
+.venv/
+.*
+assets/
