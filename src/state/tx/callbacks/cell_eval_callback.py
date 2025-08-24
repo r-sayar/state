@@ -17,6 +17,7 @@ from typing import Dict, List, Optional, Union
 import lightning.pytorch as pl
 import torch
 from lightning.pytorch.callbacks import Callback
+from .metrics_plotter import MetricsPlotter
 
 try:
     import wandb
@@ -47,14 +48,14 @@ class CellEvalCallback(Callback):
         temp_checkpoint_name: str = "temp_eval_checkpoint.ckpt",
         profile: str = "minimal",  # For faster evaluation
         # Multi-Metrik Best Checkpoint Tracking
-        primary_metric: str = "discrimination_score_l1",  # Hauptmetrik für finale Entscheidung
-        metric_weights: Optional[Dict[str, float]] = None,  # Gewichtung der Metriken
-        metric_modes: Optional[Dict[str, str]] = None,  # "max" oder "min" pro Metrik
-        improvement_threshold: float = 0.001,  # Mindestverbesserung für primäre Metrik
+        primary_metric: str = "discrimination_score_l1",  # HMain metric for final decision
+        metric_weights: Optional[Dict[str, float]] = None,  # Weighting of metrics
+        metric_modes: Optional[Dict[str, str]] = None,  # “max” or “min” per metric
+        improvement_threshold: float = 0.001,  # Minimum improvement for primary metric
         composite_score_method: str = "weighted_average",  # "weighted_average", "rank_based", "pareto"
         save_best_checkpoint: bool = True,
         track_all_metrics: bool = True,
-        baseline_comparison: bool = True,  # Verwende from_baseline Werte        
+        baseline_comparison: bool = True,  # Use from_baseline values     
     ):
         super().__init__()
         
@@ -100,38 +101,48 @@ class CellEvalCallback(Callback):
         self.track_all_metrics = track_all_metrics
         self.baseline_comparison = baseline_comparison
         
-        # Tracking aller Metriken
-        self.all_metrics_history = []  # Liste aller Metrik-Dictionaries pro Step
-        self.best_scores_per_metric = {}  # Beste Werte pro Metrik
-        self.best_steps_per_metric = {}  # Beste Steps pro Metrik
+        # All metrics Tracking 
+        self.all_metrics_history = []  # List of all metric dictionaries per step
+        self.best_scores_per_metric = {}  # Best values per metric
+        self.best_steps_per_metric = {}  # Best steps per metric
         self.best_composite_score = None
         self.best_composite_step = None
         self.best_checkpoint_path = None
         
-        # Automatische Metrik-Erkennung
+        # Automatic metric detection
         self.discovered_metrics = set()
-        self.metric_statistics = {}  # Min, Max, Mean, Std pro Metrik
+        self.metric_statistics = {}  # Min, Max, Mean, Std per metric
         
-        # Standard Metrik-Modi - angepasst für from_baseline Werte
+        # Default metric modes - adjusted for from_baseline values
         self.default_metric_modes = {
-            'discrimination_score_l1': 'max',  # Höher ist besser (Verbesserung gegenüber Baseline)
-            'overlap_at_N': 'max',             # Höher ist besser
-            'mae': 'max',                      # Höher ist besser (da from_baseline - Verbesserung gegenüber Baseline)
-            'avg_score': 'max',                # Höher ist besser
-            'mse': 'max',                      # Höher ist besser (from_baseline)
-            'rmse': 'max',                     # Höher ist besser (from_baseline)
-            'pearson_delta': 'max',            # Höher ist besser
-            'r2': 'max',                       # Höher ist besser
-            'correlation': 'max',              # Höher ist besser
+            'discrimination_score_l1': 'max',  # Higher is better
+            'overlap_at_N': 'max',             # Higher is better
+            'mae': 'min',                      # Lower is better 
+            'avg_score': 'max',                # Higher is better
+            'mse': 'min',                      # Lower is better
+            'rmse': 'min',                     # Lower is better 
+            'pearson_delta': 'max',            # Higher is better
+            'r2': 'max',                       # Higher is better
+            'correlation': 'max',              # Higher is better
         }
         
-        # Pfade
+        # Paths
         self.scores_dir = output_dir
         self.best_scores_file = os.path.join(output_dir, "best_scores_all_metrics.json")
         self.metrics_analysis_file = os.path.join(output_dir, "metrics_analysis.json")
         
-        # Lade vorherige Daten
+        # Load previous data
         self._load_all_metrics_history()
+        
+        # Initialize plotter
+        self.plotter = MetricsPlotter(
+            plots_dir=self.plots_dir,
+            primary_metric=self.primary_metric,
+            dpi=300,
+            results_history=self.results_history,
+            agg_results_history=self.agg_results_history,
+            all_metrics_history=self.all_metrics_history,
+        )
 
         # Cell-eval Setup
         self._setup_cell_eval()
@@ -280,7 +291,7 @@ class CellEvalCallback(Callback):
             logger.warning(f"Could not load existing evaluation history: {e}")
 
     def _read_all_metrics_from_score_file(self, step):
-        """Liest ALLE Metriken aus der score_step_X.csv Datei (metric,from_baseline Format)"""
+        """Reads ALL metrics from the score_step_X.csv file (metric,from_baseline format)"""
         score_file = os.path.join(self.scores_dir, f"score_step_{step}.csv")
         
         if not os.path.exists(score_file):
@@ -290,13 +301,13 @@ class CellEvalCallback(Callback):
         try:
             df = pd.read_csv(score_file)
             
-            # Prüfe erwartete Spalten
+            # Check expected columns
             if 'metric' not in df.columns or 'from_baseline' not in df.columns:
                 logger.error(f"Expected columns 'metric' and 'from_baseline' not found in {score_file}")
                 logger.info(f"Available columns: {list(df.columns)}")
                 return None
             
-            # Konvertiere zu Dictionary
+            # Convert to dictionary
             metrics_dict = {}
             
             for _, row in df.iterrows():
@@ -305,12 +316,12 @@ class CellEvalCallback(Callback):
                 
                 metrics_dict[metric_name] = from_baseline_value
             
-            # Metadaten hinzufügen
+            # Add metadata
             metrics_dict['_step'] = step
             metrics_dict['_timestamp'] = datetime.now().isoformat()
             metrics_dict['_num_metrics'] = len(df)
             
-            # Aktualisiere entdeckte Metriken
+            # Update discovered metrics
             new_metrics = set(metrics_dict.keys()) - {'_step', '_timestamp', '_num_metrics'}
             self.discovered_metrics.update(new_metrics)
             
@@ -325,7 +336,7 @@ class CellEvalCallback(Callback):
             traceback.print_exc()
             return None
     def _update_metric_statistics(self, metrics_dict):
-        """Aktualisiert Statistiken für alle Metriken"""
+        """Updated statistics for all metrics"""
         for metric, value in metrics_dict.items():
             if metric.startswith('_'):  # Skip Metadaten
                 continue
@@ -347,59 +358,59 @@ class CellEvalCallback(Callback):
             stats['max'] = max(stats['max'], value)
             stats['count'] += 1
             
-            # Berechne laufende Statistiken
+            # Calculate running statistics
             values = stats['values']
             stats['mean'] = np.mean(values)
             stats['std'] = np.std(values) if len(values) > 1 else 0.0
             stats['median'] = np.median(values)
             
-            # Behalte nur die letzten 100 Werte für Performance
+            # Only keep the last 100 values for performance
             if len(stats['values']) > 100:
                 stats['values'] = stats['values'][-100:]
 
     def _determine_metric_mode(self, metric_name):
-        """Bestimmt automatisch ob höher oder niedriger besser ist für from_baseline Werte"""
+        """Automatically determines whether higher or lower is better for from_baseline values"""
         if metric_name in self.metric_modes:
             return self.metric_modes[metric_name]
         
-        # Suche in Standard-Modi
+        # Search in standard modes
         for pattern, mode in self.default_metric_modes.items():
             if pattern.lower() in metric_name.lower():
                 return mode
         
-        # Für from_baseline Werte: Standardmäßig ist höher besser
-        # (positive Werte bedeuten Verbesserung gegenüber Baseline)
+        # For from_baseline values: By default, higher is better
+        # (positive values indicate improvement over baseline)
         logger.info(f"Unknown metric mode for '{metric_name}', defaulting to 'max' (from_baseline logic)")
         return 'max'
 
     def _calculate_normalized_score(self, metric_name, value):
-        """Normalisiert einen from_baseline Wert auf [0, 1]"""
+        """Normalizes a from_baseline value to [0, 1]"""
         if metric_name not in self.metric_statistics:
-            # Für from_baseline Werte: 0 ist neutral, positive Werte sind gut
+            # For from_baseline values: 0 is neutral, positive values are good
             if value >= 0:
-                return 0.5 + min(value * 0.1, 0.5)  # Skaliere positive Werte auf [0.5, 1.0]
+                return 0.5 + min(value * 0.1, 0.5)  # Scale positive values to [0.5, 1.0]
             else:
-                return 0.5 - min(abs(value) * 0.1, 0.5)  # Skaliere negative Werte auf [0.0, 0.5]
+                return 0.5 - min(abs(value) * 0.1, 0.5)  # Scale negative values to [0.0, 0.5]
         
         stats = self.metric_statistics[metric_name]
         min_val = stats['min']
         max_val = stats['max']
         
         if min_val == max_val:
-            return 0.5  # Neutral wenn keine Variation
+            return 0.5  # Neutral if no variation
         
-        # Normalisierung auf [0, 1]
+        # Normalisierung to [0, 1]
         normalized = (value - min_val) / (max_val - min_val)
         
-        # Für from_baseline Werte ist höher normalerweise besser
-        # (außer explizit anders konfiguriert)
+        # For from_baseline values, higher is usually better
+        # (unless explicitly configured otherwise)
         mode = self._determine_metric_mode(metric_name)
         if mode == 'min':
             normalized = 1.0 - normalized
         
         return np.clip(normalized, 0.0, 1.0)
     def _calculate_composite_score(self, metrics_dict):
-        """Berechnet einen zusammengesetzten Score aus allen Metriken"""
+        """Calculates a composite score from all metrics"""
         if self.composite_score_method == "weighted_average":
             return self._calculate_weighted_average_score(metrics_dict)
         elif self.composite_score_method == "rank_based":
@@ -410,7 +421,7 @@ class CellEvalCallback(Callback):
             return self._calculate_weighted_average_score(metrics_dict)
 
     def _calculate_composite_score(self, metrics_dict):
-        """Berechnet einen zusammengesetzten Score aus allen Metriken"""
+        """Calculates a composite score from all metrics"""
         if self.composite_score_method == "weighted_average":
             return self._calculate_weighted_average_score(metrics_dict)
         elif self.composite_score_method == "rank_based":
@@ -421,7 +432,7 @@ class CellEvalCallback(Callback):
             return self._calculate_weighted_average_score(metrics_dict)
 
     def _calculate_weighted_average_score(self, metrics_dict):
-        """Gewichteter Durchschnitt aller normalisierten Metriken"""
+        """Weighted average of all normalized metrics"""
         total_score = 0.0
         total_weight = 0.0
         
@@ -429,13 +440,13 @@ class CellEvalCallback(Callback):
             if metric.startswith('_') or not isinstance(value, (int, float)):
                 continue
             
-            # Normalisierte Score
-            normalized_score = self._calculate_normalized_score(metric, value)
+            # Normalized score
+            normalized_score = value #self._calculate_normalized_score(metric, value)
             
-            # Gewichtung
+            # Weighting
             weight = self.metric_weights.get(metric, 1.0)
             
-            # Primäre Metrik bekommt extra Gewicht
+            # Primary metric gets extra weight
             if metric == self.primary_metric:
                 weight *= 2.0
             
@@ -445,7 +456,7 @@ class CellEvalCallback(Callback):
         return total_score / total_weight if total_weight > 0 else 0.0
 
     def _calculate_rank_based_score(self, metrics_dict):
-        """Rang-basierter Score (wie gut ist jede Metrik im Vergleich zur Historie)"""
+        """Rank-based score (how good is each metric compared to history)"""
         ranks = []
         
         for metric, value in metrics_dict.items():
@@ -455,18 +466,18 @@ class CellEvalCallback(Callback):
             if metric not in self.metric_statistics:
                 continue
             
-            # Berechne Rang basierend auf historischen Werten
+            # Calculate rank based on historical values
             historical_values = self.metric_statistics[metric]['values']
             mode = self._determine_metric_mode(metric)
             
             if mode == 'max':
-                # Höher ist besser
+                # Higher is better
                 rank = sum(1 for v in historical_values if value >= v) / len(historical_values)
             else:
-                # Niedriger ist besser
+                # Lower is better
                 rank = sum(1 for v in historical_values if value <= v) / len(historical_values)
             
-            # Gewichtung anwenden
+            # Apply weighting
             weight = self.metric_weights.get(metric, 1.0)
             if metric == self.primary_metric:
                 weight *= 2.0
@@ -476,7 +487,7 @@ class CellEvalCallback(Callback):
         return np.mean(ranks) if ranks else 0.0
 
     def _update_best_scores(self, metrics_dict, current_step):
-        """Aktualisiert die besten Scores für alle Metriken"""
+        """Updates the best scores for all metrics"""
         improvements = {}
         
         for metric, value in metrics_dict.items():
@@ -485,11 +496,11 @@ class CellEvalCallback(Callback):
             
             mode = self._determine_metric_mode(metric)
             
-            # Prüfe ob es eine Verbesserung gibt
+            # Check if there is an improvement
             is_improvement = False
-            
+
             if metric not in self.best_scores_per_metric:
-                # Erste Messung
+            # First measurement
                 is_improvement = True
             else:
                 old_value = self.best_scores_per_metric[metric]
@@ -515,14 +526,14 @@ class CellEvalCallback(Callback):
         return improvements
 
     def _is_composite_score_improved(self, current_composite_score):
-        """Prüft ob der zusammengesetzte Score eine Verbesserung darstellt"""
+        """Checks whether the composite score represents an improvement"""
         if self.best_composite_score is None:
             return True
         
         return current_composite_score > self.best_composite_score + self.improvement_threshold
 
     def _save_all_metrics_history(self):
-        """Speichert die komplette Metrik-Historie"""
+        """Stores the complete metric history"""
         try:
             # Best Scores Summary
             best_data = {
@@ -541,7 +552,7 @@ class CellEvalCallback(Callback):
             with open(self.best_scores_file, 'w') as f:
                 json.dump(best_data, f, indent=2)
             
-            # Komplette Historie
+            # comnplete history
             with open(self.metrics_analysis_file, 'w') as f:
                 json.dump(self.all_metrics_history, f, indent=2)
                 
@@ -552,12 +563,12 @@ class CellEvalCallback(Callback):
             logger.warning(f"Could not save metrics history: {e}")
 
     def _save_best_checkpoint_multi_metric(self, trainer, current_step, metrics_dict, composite_score, improvements):
-        """Speichert Checkpoint mit Multi-Metrik-Informationen"""
+        """Stores checkpoint with multi-metric information"""
         try:
-            # Pfad für den besten Checkpoint
+            # Path for the best checkpoint
             best_checkpoint_path = os.path.join(self.output_dir, "best_checkpoint.ckpt")
             
-            # Speichere den Checkpoint
+            # saves checkpoint
             trainer.save_checkpoint(best_checkpoint_path)
             
             # Update composite tracking
@@ -566,17 +577,17 @@ class CellEvalCallback(Callback):
             self.best_composite_step = current_step
             self.best_checkpoint_path = best_checkpoint_path
             
-            # Speichere alle Daten
+            # saves all data
             self._save_all_metrics_history()
             
-            # Detailliertes Logging
+            # Detailed logging
             logger.info(f"🎉 NEW BEST CHECKPOINT SAVED! Step {current_step}")
             logger.info(f"Composite Score: {old_composite:.4f} → {composite_score:.4f} "
                        f"(+{composite_score - (old_composite or 0):.4f})")
             
             logger.info(f"Individual metric improvements:")
             for metric, improvement_data in improvements.items():
-                old_val = improvement_data['old_value']
+                old_val = improvement_data['old_value'] if improvement_data['old_value'] is not None else -1.0
                 new_val = improvement_data['new_value']
                 mode = improvement_data['mode']
                 
@@ -586,20 +597,20 @@ class CellEvalCallback(Callback):
                 else:
                     logger.info(f"  • {metric}: {new_val:.4f} (first measurement)")
             
-            # Auch Step-spezifische Kopie speichern
-            step_best_path = os.path.join(self.output_dir, f"best_checkpoint_step_{current_step}.ckpt")
-            trainer.save_checkpoint(step_best_path)
+            # Also save step-specific copy
+            #step_best_path = os.path.join(self.output_dir, f"best_checkpoint_step_{current_step}.ckpt")
+            #trainer.save_checkpoint(step_best_path)
             
             # WandB Logging
             if self.log_to_wandb and WANDB_AVAILABLE:
                 try:
                     wandb_log = {
                         "best_composite_score": composite_score,
-                        "best_step": current_step,
+                        "best_step": trainer.global_step,
                         "checkpoint_saved": 1
                     }
                     
-                    # Alle besten Metriken loggen
+                    # logs all best metrics
                     for metric, value in self.best_scores_per_metric.items():
                         wandb_log[f"best_{metric}"] = value
                     
@@ -607,8 +618,8 @@ class CellEvalCallback(Callback):
                 except:
                     pass
             
-            # Erstelle detaillierte Zusammenfassung
-            self._create_comprehensive_checkpoint_summary(current_step, metrics_dict, composite_score, improvements)
+            # Create detailed summary
+            self._create_comprehensive_checkpoint_summary(trainer.global_step, metrics_dict, composite_score, improvements)
             
             return True
             
@@ -617,7 +628,7 @@ class CellEvalCallback(Callback):
             return False
     
     def _create_comprehensive_checkpoint_summary(self, current_step, metrics_dict, composite_score, improvements):
-        """Erstellt eine umfassende Zusammenfassung aller Metriken"""
+        """Creates a comprehensive summary of all metrics"""
         summary_file = os.path.join(self.output_dir, "comprehensive_best_checkpoint_summary.txt")
         
         try:
@@ -637,7 +648,7 @@ class CellEvalCallback(Callback):
                 for metric, value in sorted(metrics_dict.items()):
                     if not metric.startswith('_'):
                         mode = self._determine_metric_mode(metric)
-                        normalized = self._calculate_normalized_score(metric, value)
+                        normalized = value # self._calculate_normalized_score(metric, value)
                         f.write(f"{metric:30s}: {value:10.6f} (norm: {normalized:.3f}, mode: {mode})\n")
                 
                 f.write("\nIMPROVEMENTS IN THIS STEP:\n")
@@ -689,31 +700,31 @@ class CellEvalCallback(Callback):
             logger.warning(f"Could not create comprehensive summary: {e}")
 
     def _is_score_improved(self, metric_name, current_value):
-        """Prüft ob der aktuelle from_baseline Wert eine Verbesserung darstellt"""
+        """Checks whether the current from_baseline value represents an improvement."""
         if metric_name not in self.best_scores_per_metric:
-            return True  # Erster Wert ist immer eine "Verbesserung"
+            return True  # The first value is always an “improvement.”
         
         best_value = self.best_scores_per_metric[metric_name]
         mode = self._determine_metric_mode(metric_name)
         
         if mode == 'max':
-            # Höher ist besser (Standard für from_baseline)
+            # Higher is better 
             improvement = current_value - best_value
             return improvement > self.improvement_threshold
         else:
-            # Niedriger ist besser (seltener Fall)
+            # Lower is better
             improvement = best_value - current_value
             return improvement > self.improvement_threshold
 
     def _update_best_scores(self, metrics_dict, current_step):
-        """Aktualisiert die besten Scores für alle from_baseline Metriken"""
+        """Updates the best scores for all from_baseline metrics"""
         improvements = {}
         
         for metric, value in metrics_dict.items():
             if metric.startswith('_') or not isinstance(value, (int, float)):
                 continue
             
-            # Prüfe ob es eine Verbesserung gibt
+            # Check whether there is any improvement
             if self._is_score_improved(metric, value):
                 old_value = self.best_scores_per_metric.get(metric, None)
                 self.best_scores_per_metric[metric] = value
@@ -729,35 +740,35 @@ class CellEvalCallback(Callback):
         
         return improvements
     def _check_and_save_best_checkpoint_multi_metric(self, trainer):
-        """Hauptfunktion: Multi-Metrik Checkpoint-Prüfung"""
+        """Main function: Multi-metric checkpoint verification"""
         if not self.save_best_checkpoint:
             return
         
         current_step = trainer.global_step
         
-        # Lese alle Metriken
+        # read all metrics
         metrics_dict = self._read_all_metrics_from_score_file(current_step)
         
         if metrics_dict is None:
             logger.warning(f"Could not read metrics for step {current_step}")
             return
         
-        # Füge zur Historie hinzu
+        # Add to history
         self.all_metrics_history.append(metrics_dict)
         
-        # Aktualisiere Statistiken
+        # Update statistics
         self._update_metric_statistics(metrics_dict)
         
-        # Berechne zusammengesetzten Score
+        # Calculate composite score
         composite_score = self._calculate_composite_score(metrics_dict)
         
-        # Prüfe individuelle Metrik-Verbesserungen
+        # Check individual metric improvements
         improvements = self._update_best_scores(metrics_dict, current_step)
         
-        # Prüfe ob zusammengesetzter Score sich verbessert hat
+        # Check if composite score has improved
         composite_improved = self._is_composite_score_improved(composite_score)
         
-        # Speichere Checkpoint wenn Verbesserung vorliegt
+        # Save checkpoint if improvement is present
         should_save = composite_improved or len(improvements) > 0
         
         if should_save:
@@ -766,28 +777,47 @@ class CellEvalCallback(Callback):
             )
             
             if success:
-                # Erstelle erweiterte Visualisierungen
+                # Create advanced visualizations
                 self._create_multi_metric_analysis_plots(current_step)
         else:
             if self.verbose:
                 logger.info(f"Step {current_step}: Composite score {composite_score:.4f} "
                            f"(best: {self.best_composite_score:.4f}), no improvements")
         
-        # Speichere Historie regelmäßig
+        # Save history regularly
         self._save_all_metrics_history()
     def _create_multi_metric_analysis_plots(self, current_step):
-        """Erstellt umfassende Multi-Metrik-Analyse-Plots"""
+        """Delegiert Plot-Erstellung an MetricsPlotter"""
+        
+        if self.eval_counter % self.plot_every_n_evals != 0:
+            return
+        #print(f"Dan: all_metrics_history: {self.all_metrics_history}")
+
+        self.plotter.create_all_plots(
+            all_metrics_history=self.all_metrics_history,
+            best_scores_per_metric=self.best_scores_per_metric,
+            best_steps_per_metric=self.best_steps_per_metric,
+            metric_statistics=self.metric_statistics,
+            current_step=current_step,
+            composite_score_method=self.composite_score_method,
+            metric_weights=self.metric_weights,
+            best_composite_score=self.best_composite_score,
+            best_composite_step=self.best_composite_step
+        )
+
+    '''def _create_multi_metric_analysis_plots(self, current_step):
+        """Creates comprehensive multi-metric analysis plots"""
         
         if len(self.all_metrics_history) < 2:
             return
         
-        # Konvertiere Historie zu DataFrame
+        # Convert history to DataFrame
         df_history = pd.DataFrame(self.all_metrics_history)
         
-        # 1. Alle Metriken über Zeit (normalisiert)
+        # 1. All metrics over time (normalised)
         self._plot_all_metrics_normalized(df_history, current_step)
         
-        # 2. Metrik-Korrelationen
+        # 2. metric correlations
         self._plot_metric_correlations(df_history, current_step)
         
         # 3. Best Scores Dashboard
@@ -796,11 +826,11 @@ class CellEvalCallback(Callback):
         # 4. Composite Score Evolution
         self._plot_composite_score_evolution(df_history, current_step)
         
-        # 5. Metrik-Verteilungen
+        # 5. Metric distributions
         self._plot_metric_distributions(df_history, current_step)
 
     def _plot_all_metrics_normalized(self, df_history, current_step):
-        """Plot aller Metriken normalisiert über Zeit"""
+        """Plot of all metrics normalised over time"""
         
         metrics = [col for col in df_history.columns if not col.startswith('_')]
         
@@ -817,16 +847,16 @@ class CellEvalCallback(Callback):
                     values = df_history[metric].dropna()
                     steps = df_history.loc[values.index, '_step']
                     
-                    # Normalisiere Werte für bessere Vergleichbarkeit
+                    # Normalize values for better comparability
                     normalized_values = []
                     for val in values:
-                        norm_val = self._calculate_normalized_score(metric, val)
+                        norm_val = val #self._calculate_normalized_score(metric, val)
                         normalized_values.append(norm_val)
                     
                     ax.plot(steps, normalized_values, marker='o', color=color, 
                         label=metric, linewidth=2, markersize=4, alpha=0.8)
                     
-                    # Markiere besten Wert
+                    # Mark best value
                     if metric in self.best_scores_per_metric:
                         best_step = self.best_steps_per_metric[metric]
                         if best_step in steps.values:
@@ -859,7 +889,7 @@ class CellEvalCallback(Callback):
             traceback.print_exc()
 
     def _plot_metric_correlations(self, df_history, current_step):
-        """Plot der Korrelationen zwischen Metriken"""
+        """Plot of correlations between metrics"""
         
         metrics = [col for col in df_history.columns if not col.startswith('_')]
         
@@ -985,7 +1015,7 @@ class CellEvalCallback(Callback):
             ax2.legend()
             
             # 3. Normalized Best Scores
-            normalized_scores = [self._calculate_normalized_score(metric, score) 
+            normalized_scores = [score # self._calculate_normalized_score(metric, score) 
                             for metric, score in zip(metrics, best_scores)]
             
             ax3.bar(range(len(metrics)), normalized_scores, alpha=0.7, color='orange')
@@ -1085,7 +1115,7 @@ class CellEvalCallback(Callback):
                 
                 for metric, value in last_record.items():
                     if not metric.startswith('_') and isinstance(value, (int, float)):
-                        normalized = self._calculate_normalized_score(metric, value)
+                        normalized = value #self._calculate_normalized_score(metric, value)
                         weight = self.metric_weights.get(metric, 1.0)
                         if metric == self.primary_metric:
                             weight *= 2.0
@@ -1235,7 +1265,7 @@ class CellEvalCallback(Callback):
                 for metric, value in sorted(metrics_dict.items()):
                     if not metric.startswith('_'):
                         mode = self._determine_metric_mode(metric)
-                        normalized = self._calculate_normalized_score(metric, value)
+                        normalized = value #self._calculate_normalized_score(metric, value)
                         
                         # Interpretation der from_baseline Werte
                         if value > 0:
@@ -1696,9 +1726,10 @@ class CellEvalCallback(Callback):
         for metric in available_metrics:
             # Min-Max Normalization
             values = combined_agg_results[metric]
+            print(F"Dan values: {values}")
             normalized_values = (values - values.min()) / (values.max() - values.min()) if values.max() != values.min() else values
-            
-            ax1.plot(combined_agg_results['global_step'], normalized_values, 
+            print(F"Dan normalized_values: {normalized_values}")
+            ax1.plot(combined_agg_results['global_step'], values, #normalized_values, 
                     marker='o', label=f'{metric} (normalized)', linewidth=2)
         
         ax1.set_title('Normalized Metrics Comparison')
@@ -2673,10 +2704,10 @@ class CellEvalCallback(Callback):
             steps = recent_data['global_step']
             
             # Normalisierung für bessere Vergleichbarkeit
-            if values.max() != values.min():
-                normalized_values = (values - values.min()) / (values.max() - values.min())
-            else:
-                normalized_values = values
+            #if values.max() != values.min():
+            #    normalized_values = (values - values.min()) / (values.max() - values.min())
+            #else:
+            normalized_values = values
             
             ax.plot(range(len(steps)), normalized_values, 'o-', 
                 linewidth=2, markersize=8, label=f'{metric}')
@@ -3084,66 +3115,8 @@ class CellEvalCallback(Callback):
                 # Cleanup
                 #self._cleanup_temp_files(temp_checkpoint_path)
                 print("no cleanup necessary!")
-"""
-    def _save_temp_checkpoint(self, trainer):
-        """Saves temporary checkpoint for run_tx_predict"""
-        temp_dir = os.path.join(self.output_dir, "temp_eval")
-        os.makedirs(temp_dir, exist_ok=True)
-        temp_checkpoint_path = os.path.join(temp_dir, self.temp_checkpoint_name)
-        
-        trainer.save_checkpoint(temp_checkpoint_path)
-        return temp_checkpoint_path
-    def _call_run_tx_predict(self, checkpoint_path):
-        """Call run_tx_predict with the correct arguments"""
-        
-        # Create arguments for run_tx_predict
-        class MockArgs:
-            def __init__(self, output_dir, checkpoint, profile="minimal", predict_only=False):
-                self.output_dir = output_dir
-                self.checkpoint = os.path.basename(checkpoint)  # only filename
-                self.test_time_finetune = 0  # No fine-tuning during training
-                self.profile = profile
-                self.predict_only = predict_only
-        
-        # Move checkpoint to the expected directory
-        expected_checkpoint_dir = os.path.join(self.output_dir, "checkpoints")
-        os.makedirs(expected_checkpoint_dir, exist_ok=True)
-        expected_checkpoint_path = os.path.join(expected_checkpoint_dir, self.temp_checkpoint_name)
-        
-        # copy checkpoint
-        import shutil
-        shutil.copy2(checkpoint_path, expected_checkpoint_path)
-        
-        try:
-            # call cell_eval baseline
-            if self.agg_baseline is None:                
-                logger.info("call Cell-eval baseline.")
-                # create mock arguments
-                args = MockArgs(
-                    output_dir=self.output_dir,
-                    checkpoint=expected_checkpoint_path,                
-                    profile="vcc",
-                    predict_only=False
-                )
-                res_baseline, self.agg_baseline = run_tx_predict(args)
-                logger.info(f"Cell-eval baseline results: {self.agg_baseline}")
-            # create mock arguments
-            args = MockArgs(
-                output_dir=self.output_dir,
-                checkpoint=expected_checkpoint_path,
-                profile="vcc",
-                predict_only=False
-            )
-            
-            # run_tx_predict aufrufen
-            (results, agg_results) = run_tx_predict(args)
-            #print("Buchi after run_tx_predict in _call_run_tx_predict")
-            return (results, agg_results)
-            
-        finally:
-            # Delete temporary checkpoint from checkpoints/
-            if os.path.exists(expected_checkpoint_path):
-                os.remove(expected_checkpoint_path)
+
+    
 
     def _plot_performance_trends(self, combined_agg_results, current_step):
         """Detailed trend analysis with predictions"""
@@ -3448,6 +3421,10 @@ class CellEvalCallback(Callback):
             
             # Trend-Linie
             if len(x_vals) > 2:
+                #print(f"DAN: x_vals: {x_vals}")
+                #print(f"DAN: y_vals: {x_vals}")
+                #print(f"DAN: type(x_vals): {type(x_vals)}")
+                #print(f"DAN: type(y_vals): {type(x_vals)}")
                 z = np.polyfit(x_vals, y_vals, 1)
                 p = np.poly1d(z)
                 ax2.plot(x_vals, p(x_vals), "r--", alpha=0.8, linewidth=2)
@@ -3741,7 +3718,59 @@ class CellEvalCallback(Callback):
         
         logger.info(f"Saved training dynamics analysis: {save_path}")
 
-
+'''
+    def _call_run_tx_predict(self, checkpoint_path):
+        """Call run_tx_predict with the correct arguments"""
+        
+        # Create arguments for run_tx_predict
+        class MockArgs:
+            def __init__(self, output_dir, checkpoint, profile="minimal", predict_only=False):
+                self.output_dir = output_dir
+                self.checkpoint = os.path.basename(checkpoint)  # only filename
+                self.test_time_finetune = 0  # No fine-tuning during training
+                self.profile = profile
+                self.predict_only = predict_only
+        
+        # Move checkpoint to the expected directory
+        expected_checkpoint_dir = os.path.join(self.output_dir, "checkpoints")
+        os.makedirs(expected_checkpoint_dir, exist_ok=True)
+        expected_checkpoint_path = os.path.join(expected_checkpoint_dir, self.temp_checkpoint_name)
+        
+        # copy checkpoint
+        import shutil
+        shutil.copy2(checkpoint_path, expected_checkpoint_path)
+        
+        try:
+            # call cell_eval baseline
+            if self.agg_baseline is None:                
+                logger.info("call Cell-eval baseline.")
+                # create mock arguments
+                args = MockArgs(
+                    output_dir=self.output_dir,
+                    checkpoint=expected_checkpoint_path,                
+                    profile="vcc",
+                    predict_only=False
+                )
+                res_baseline, self.agg_baseline = run_tx_predict(args)
+                logger.info(f"Cell-eval baseline results: {self.agg_baseline}")
+            # create mock arguments
+            args = MockArgs(
+                output_dir=self.output_dir,
+                checkpoint=expected_checkpoint_path,                
+                profile="vcc",
+                predict_only=False
+            )
+            
+            # run_tx_predict aufrufen
+            (results, agg_results) = run_tx_predict(args)
+            #print("Buchi after run_tx_predict in _call_run_tx_predict")
+            return (results, agg_results)
+            
+        finally:
+            # Delete temporary checkpoint from checkpoints/
+            if os.path.exists(expected_checkpoint_path):
+                os.remove(expected_checkpoint_path)
+            #print(f"Buchi no need to remove expected checkpoint path: {checkpoint_path}")
 
     def on_train_batch_end(self, trainer, pl_module, outputs, batch, batch_idx):
         if trainer.global_step % self.eval_every_n_steps == 0 and trainer.global_step > 0:
@@ -3759,23 +3788,22 @@ class CellEvalCallback(Callback):
                 # log metrics
                 #if agg_results is not None and self.log_to_wandb:
                 #    self._log_metrics(trainer, agg_results)
-                
-                # From-baseline Multi-Metrik Checkpoint-Prüfung
-                self._check_and_save_best_checkpoint_multi_metric(trainer)
-
+                                
                 # run score
-                score_filename = "score_step_" + str(self.eval_counter) + ".csv"
+                score_filename = "score_step_" + str(trainer.global_step) + ".csv"
                 score_agg_metrics(
                     results_user=agg_results,
                     results_base=self.agg_baseline,                    
                     output=os.path.join(self.output_dir, score_filename)
                 )
-                logger.info(f"Buchi calc score_agg_metrics in step: {self.eval_counter}")
     
+                # From-baseline Multi-Metrik Checkpoint-Prüfung
+                self._check_and_save_best_checkpoint_multi_metric(trainer)
+
                 # Create plots (all N evaluations)
                 if self.eval_counter % self.plot_every_n_evals == 0:
                     logger.info(f"Creating evaluation plots (eval #{self.eval_counter})")
-                    self._create_evaluation_plots(trainer)
+                    self._create_multi_metric_analysis_plots(trainer.global_step) #self._create_evaluation_plots(trainer)
                     
             except Exception as e:
                 logger.error(f"Error during dynamic evaluation: {e}")
@@ -3794,6 +3822,14 @@ class CellEvalCallback(Callback):
             combined_agg_results = pd.concat(self.agg_results_history, ignore_index=True)
         
         return combined_results, combined_agg_results"""
+    def _save_temp_checkpoint(self, trainer):
+        """Saves temporary checkpoint for run_tx_predict"""
+        temp_dir = os.path.join(self.output_dir, "temp_eval")
+        os.makedirs(temp_dir, exist_ok=True)
+        temp_checkpoint_path = os.path.join(temp_dir, self.temp_checkpoint_name)
+        
+        trainer.save_checkpoint(temp_checkpoint_path)
+        return temp_checkpoint_path
 
     def _cleanup_temp_files(self, checkpoint_path):
         """Cleanup of temporary files"""
