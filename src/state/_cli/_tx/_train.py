@@ -2,8 +2,9 @@ import argparse as ap
 import os
 
 from omegaconf import DictConfig, OmegaConf
+from ...tx.callbacks import BatchSpeedMonitorCallback, ScheduledFinetuningCallback
 from ...tx.callbacks.cell_eval_callback import CellEvalCallback
-from ._predict import run_tx_predict
+#from ._predict import run_tx_predict
 
 def add_arguments_train(parser: ap.ArgumentParser):
     # Allow remaining args to be passed through to Hydra
