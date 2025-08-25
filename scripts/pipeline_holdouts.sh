@@ -21,7 +21,7 @@ PREDICTION_NAME="prediction"
 CKPT="final.ckpt"
 
 # output directory for results
-OUT_DIR=cell-eval-outdir
+OUT_DIR="cell-eval-outdir"
 
 # parallelization
 THREADS=8
