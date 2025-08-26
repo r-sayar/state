@@ -338,7 +338,7 @@ def run_tx_predict(args: ap.ArgumentParser):
         # adata_real = anndata.AnnData(X=final_reals, obs=obs, var=var)
         adata_real = anndata.AnnData(X=final_reals, obs=obs)
 
-    # Save the AnnData objects
+    # Save the AnnData objects DAN Maybe not saving during eval_train?
     results_dir = os.path.join(args.output_dir, "eval_" + os.path.basename(args.checkpoint))
     os.makedirs(results_dir, exist_ok=True)
     adata_pred_path = os.path.join(results_dir, "adata_pred.h5ad")
@@ -376,11 +376,10 @@ def run_tx_predict(args: ap.ArgumentParser):
                 outdir=results_dir,
                 prefix=ct,
                 pdex_kwargs=pdex_kwargs,
-                batch_size=2048,
-                score_mode=True
+                batch_size=2048,                
             )
 
-            # Buchi add results and score_mode=True above
+            # Buchi add results
             (results, agg_results) = evaluator.compute(
                 profile=args.profile,
                 metric_configs={

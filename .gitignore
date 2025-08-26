@@ -22,9 +22,10 @@ wandb/
 wandb_logs/
 results/
 *.ckpt
-readable_trainings.log
-_readable_trainings.log
+readable_training.log
+*readable_training.log
 .venv/
+*.log
 .*
 assets/
 
