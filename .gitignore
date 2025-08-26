@@ -27,3 +27,6 @@ _readable_trainings.log
 .venv/
 .*
 assets/
+
+#robin
+slurm
