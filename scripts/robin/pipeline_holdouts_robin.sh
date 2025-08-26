@@ -6,18 +6,18 @@
 MODEL_DIR="results/"
 
 # experiment name
-DIR_NAME="2_layer_transformer_esm2"
+DIR_NAME="esm2-cell-set-len-256-3-en-and-decoder-layers"
 
 # toml config path
 TOML_CONFIG="scripts/robin/all_data.toml"
 
-# Competition support set
+# Competition support set -> why is this important? 
 COMPETITION_SUPPORT_SET="datasets/base_dataset"
 
 # perturbation features file
 PERT_FEATURES="datasets/embeddings/ESM2_pert_features.pt"
 #"datasets/embeddings/GenePT_gene_embedding_ada_text.pt"
-#datasets/embeddings/ESM2_pert_features.pt
+#
 # prediction file name
 PREDICTION_NAME="prediction"
 
@@ -76,15 +76,19 @@ uv run state tx train \
   data.kwargs.control_pert=non-targeting \
   data.kwargs.perturbation_features_file=${PERT_FEATURES} \
   training.max_steps=40000 \
-  training.ckpt_every_n_steps=500 \
-  training.val_freq=250 \
+  training.ckpt_every_n_steps=400 \
+  training.val_freq=200 \
   model=state_sm \
   model.kwargs.nb_decoder=true \
   wandb.tags=[${DIR_NAME}] \
   output_dir=${MODEL_DIR} \
   name=${DIR_NAME} \
   training.lr=1e-5 \
-  use_wandb=false
+  use_wandb=false \
+  model.kwargs.n_encoder_layers=3 \
+  model.kwargs.n_decoder_layers=3 \
+  model.kwargs.cell_set_len=256 \
+
 
 #model.kwargs.transformer_backbone_kwargs.num_hidden_layers=2 \
 
