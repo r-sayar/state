@@ -1,21 +1,22 @@
+#srun --job-name=pipeline-state --qos=standard  --mem=80G --time 00:30:00 bash scripts/robin/pipeline_holdouts_robin.sh --gres=gpu:A5000:1 --cpus-per-task=4
 #!/bin/bash
 # infering for the competition submission and getting the .vcc file
 
 # -- Config --
 # Path to your trained model directory where your models are
-MODEL_DIR="results/"
+MODEL_DIR="/scratch/sayar99/models/"
 
 # experiment name
-DIR_NAME="esm2-cell-set-len-256-3-en-and-decoder-layers"
+DIR_NAME="state-transition-baseline"
 
 # toml config path
 TOML_CONFIG="scripts/robin/all_data.toml"
 
 # Competition support set -> why is this important? 
-COMPETITION_SUPPORT_SET="datasets/base_dataset"
+COMPETITION_SUPPORT_SET="/scratch/sayar99/datasets/base_dataset"
 
 # perturbation features file
-PERT_FEATURES="datasets/embeddings/ESM2_pert_features.pt"
+PERT_FEATURES="/scratch/sayar99/datasets/embeddings/ESM2_pert_features.pt"
 #"datasets/embeddings/GenePT_gene_embedding_ada_text.pt"
 #
 # prediction file name
@@ -25,7 +26,7 @@ PREDICTION_NAME="prediction"
 CKPT="final.ckpt"
 
 # output directory for results
-OUT_DIR=results/pipeline_holdouts_robin
+OUT_DIR=scratch/sayar99/model-results/pipeline_holdouts_robin
 
 # parallelization
 THREADS=8
@@ -66,8 +67,8 @@ fi
 
 echo "#### Running training ####"
 
-#use learning rate 1e-5
-uv run state tx train \
+
+state tx train \
   data.kwargs.toml_config_path=${TOML_CONFIG} \
   data.kwargs.num_workers=${NUM_WORKERS} \
   data.kwargs.batch_col=batch_var \
@@ -75,9 +76,9 @@ uv run state tx train \
   data.kwargs.cell_type_key=cell_type \
   data.kwargs.control_pert=non-targeting \
   data.kwargs.perturbation_features_file=${PERT_FEATURES} \
-  training.max_steps=40000 \
-  training.ckpt_every_n_steps=400 \
-  training.val_freq=200 \
+  training.max_steps=4000 \
+  training.ckpt_every_n_steps=500 \
+  training.val_freq=500 \
   model=state_sm \
   model.kwargs.nb_decoder=true \
   wandb.tags=[${DIR_NAME}] \
@@ -88,7 +89,7 @@ uv run state tx train \
   model.kwargs.n_encoder_layers=3 \
   model.kwargs.n_decoder_layers=3 \
   model.kwargs.cell_set_len=256 \
-
+  +trainer.accelerator=gpu \
 
 #model.kwargs.transformer_backbone_kwargs.num_hidden_layers=2 \
 
