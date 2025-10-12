@@ -4,11 +4,9 @@ warnings.filterwarnings("ignore")
 
 import math
 import logging
-import numpy as np
-import pandas as pd
-import scanpy as sc
 import torch.nn.functional as F
 import torch
+from omegaconf import OmegaConf
 import lightning as L
 
 import sys
@@ -17,21 +15,15 @@ sys.path.append("../../")
 sys.path.append("../")
 
 from torch import nn, Tensor
-from torch.nn import TransformerEncoder, TransformerEncoderLayer, BCEWithLogitsLoss
+from torch.nn import BCEWithLogitsLoss
 
 
-from tqdm.auto import tqdm
 from torch.optim.lr_scheduler import ChainedScheduler, LinearLR, CosineAnnealingLR, ReduceLROnPlateau
 
-from ..data import create_dataloader
 from ..utils import (
-    compute_gene_overlap_cross_pert,
     get_embedding_cfg,
     get_dataset_cfg,
-    compute_pearson_delta,
-    compute_perturbation_ranking_score,
 )
-from ..eval.emb import cluster_embedding
 from .loss import WassersteinLoss, KLDivergenceLoss, MMDLoss, TabularLoss
 
 
@@ -60,6 +52,7 @@ class SkipBlock(nn.Module):
         x = self.dense(x)
         x = self.layer_norm(x + residual)
         return x
+
 
 def nanstd(x):
     return torch.sqrt(torch.nanmean(torch.pow(x - torch.nanmean(x, dim=-1).unsqueeze(-1), 2), dim=-1))
@@ -177,6 +170,41 @@ class StateEmbeddingModel(L.LightningModule):
             self.dataset_loss = nn.CrossEntropyLoss()
         else:
             self.dataset_token = None
+
+    def on_save_checkpoint(self, checkpoint):
+        """
+        Persist a snapshot of the training config inside the checkpoint so downstream
+        inference/eval can run without an external config file.
+        """
+        try:
+            if self.cfg is not None:
+                # Store both a YAML snapshot and a resolved container for robustness
+                checkpoint["cfg_yaml"] = OmegaConf.to_yaml(self.cfg)
+        except Exception:
+            # Never block checkpointing if config serialization fails
+            pass
+
+        # Also package protein embeddings for standalone inference/transform.
+        try:
+            if self.protein_embeds is not None:
+                pe = self.protein_embeds
+            else:
+                # Load from configured path as a fallback
+                from ..utils import get_embedding_cfg
+
+                pe = torch.load(get_embedding_cfg(self.cfg).all_embeddings, map_location="cpu", weights_only=False)
+            # Ensure CPU tensors in the dictionary
+            if isinstance(pe, dict):
+                cpu_pe = {}
+                for k, v in pe.items():
+                    try:
+                        cpu_pe[k] = v.detach().to("cpu") if hasattr(v, "detach") else torch.tensor(v, device="cpu")
+                    except Exception:
+                        cpu_pe[k] = v
+                checkpoint["protein_embeds_dict"] = cpu_pe
+        except Exception:
+            # Do not block checkpoint save if embedding packaging fails
+            pass
 
     def _compute_embedding_for_batch(self, batch):
         batch_sentences = batch[0].to(self.device)
@@ -303,9 +331,43 @@ class StateEmbeddingModel(L.LightningModule):
 
         return gene_output, embedding, dataset_emb
 
+    def _log_nonzero_elements_stats(self, batch_sentences, prefix="trainer"):
+        """
+        Track and log non-zero elements in the sentence for ablation study.
+
+        This function analyzes the mask tensor to count how many positions in each cell sentence
+        contain expressed genes (non-zero) versus unexpressed/padded genes (zero). This is useful
+        for understanding how padding with unexpressed gene embeddings affects model learning.
+
+        Args:
+            batch_sentences: Boolean tensor of shape (batch_size, seq_len) where True indicates
+                  non-zero (expressed) genes and False indicates zero (unexpressed/padded) genes.
+            prefix: String prefix for logging (e.g., "trainer" or "validation")
+
+        Logs:
+            - {prefix}/avg_nonzero_genes: Average number of non-zero genes per cell
+            - {prefix}/nonzero_fraction: Fraction of non-zero genes relative to total slots
+        """
+        # Count non-zero elements per cell in the batch
+        nonzero_counts = batch_sentences.sum(dim=1)  # Sum across sequence dimension
+        avg_nonzero = nonzero_counts.float().mean().item()
+
+        # Calculate the fraction of non-zero elements (excluding CLS token)
+        total_slots = batch_sentences.shape[1]
+        nonzero_fraction = avg_nonzero / total_slots
+
+        # Log the statistics
+        self.log(f"{prefix}/avg_nonzero_genes", avg_nonzero)
+        self.log(f"{prefix}/nonzero_fraction", nonzero_fraction)
+
     def shared_step(self, batch, batch_idx):
         logging.info(f"Step {self.global_step} - Batch {batch_idx}")
         X, Y, batch_weights, embs, dataset_embs = self._compute_embedding_for_batch(batch)
+
+        # Track non-zero elements in the sentence
+        batch_sentences = batch[7].to(self.device).bool()
+        prefix = "trainer" if self.training else "validation"
+        self._log_nonzero_elements_stats(batch_sentences, prefix)
 
         z = embs.unsqueeze(1).repeat(1, X.shape[1], 1)  # CLS token
 
@@ -314,11 +376,12 @@ class StateEmbeddingModel(L.LightningModule):
                 torch.nan_to_num(
                     torch.nanmean(
                         Y.float().masked_fill(Y == 0, float("nan")),  # ignore zeros
-                        dim=1
+                        dim=1,
                     ),
-                    nan=0.0  # if all were 0→NaN, make it 0
+                    nan=0.0,  # if all were 0→NaN, make it 0
                 )
-                if self.cfg.model.rda else None
+                if self.cfg.model.rda
+                else None
             )
             reshaped_counts = mu.unsqueeze(1).unsqueeze(2)
             reshaped_counts = reshaped_counts.repeat(1, X.shape[1], 1)

@@ -4,9 +4,11 @@ from torch.optim import Optimizer
 
 from ..models import PerturbationModel
 from .batch_speed_monitor import BatchSpeedMonitorCallback
-from .scheduled_finetuning import ScheduledFinetuningCallback
+from .model_flops_utilization import ModelFLOPSUtilizationCallback
+from .cumulative_flops import CumulativeFLOPSCallback
 
-__all__ = ["PerturbationModel", "BatchSpeedMonitorCallback", "ScheduledFinetuningCallback"]
+__all__ = ["PerturbationModel", "BatchSpeedMonitorCallback", "ModelFLOPSUtilizationCallback", "CumulativeFLOPSCallback"]
+
 
 class GradNormCallback(Callback):
     """

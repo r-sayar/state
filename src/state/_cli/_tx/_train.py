@@ -9,7 +9,7 @@ from ...tx.callbacks.cell_eval_callback import CellEvalCallback
 def add_arguments_train(parser: ap.ArgumentParser):
     # Allow remaining args to be passed through to Hydra
     parser.add_argument("hydra_overrides", nargs="*", help="Hydra configuration overrides (e.g., data.batch_size=32)")
-    # Add custom help handler 
+    # Add custom help handler
     parser.add_argument("--help", "-h", action="store_true", help="Show configuration help with all parameters")
     
     # DAN:Hardware-spezifische Argumente - DAN
@@ -55,7 +55,12 @@ def run_tx_train(cfg: DictConfig):
     from lightning.pytorch.loggers import WandbLogger
     from lightning.pytorch.plugins.precision import MixedPrecision
 
-    from ...tx.callbacks import BatchSpeedMonitorCallback
+    from ...tx.callbacks import (
+        BatchSpeedMonitorCallback,
+        CumulativeFLOPSCallback,
+        GradNormCallback,
+        ModelFLOPSUtilizationCallback,
+    )
     from ...tx.utils import get_checkpoint_callbacks, get_lightning_module, get_loggers
 
     # DAN: Hardware-Setup-Funktionen
@@ -290,8 +295,8 @@ def run_tx_train(cfg: DictConfig):
     )
     # Add BatchSpeedMonitorCallback to log batches per second to wandb
     batch_speed_monitor = BatchSpeedMonitorCallback()
+
     callbacks = ckpt_callbacks + [batch_speed_monitor]
-    
     # DAN eval start
     # Create arguments for run_tx_predict
     class MockArgs:
@@ -353,6 +358,31 @@ def run_tx_train(cfg: DictConfig):
         else:
             logger.warning("Finetuning schedule is enabled but 'finetune_steps' or 'modules_to_unfreeze' are not set. Skipping.")
 
+    # Track gradient norm only for state transition model
+    if cfg["model"]["name"] == "state":
+        callbacks.append(GradNormCallback())
+
+    # Add ModelFLOPSUtilizationCallback to track and log MFU. currently only works for state transition model
+    if cfg["training"]["use_mfu"] and cfg["model"]["name"] == "state":
+        mfu_available_flops = cfg["training"]["mfu_kwargs"]["available_flops"]
+        mfu_use_backward = cfg["training"]["mfu_kwargs"]["use_backward"]
+        mfu_logging_interval = cfg["training"]["mfu_kwargs"]["logging_interval"]
+        mfu_window_size = cfg["training"]["mfu_kwargs"]["window_size"]
+        mfu_cb = ModelFLOPSUtilizationCallback(
+            available_flops=mfu_available_flops,
+            use_backward=mfu_use_backward,
+            logging_interval=mfu_logging_interval,
+            cell_set_len=cfg["model"]["kwargs"]["cell_set_len"],
+            window_size=mfu_window_size,
+        )
+
+        callbacks.append(mfu_cb)
+
+        # Add CumulativeFLOPSCallback to track cumulative FLOPs
+        cumulative_flops_use_backward = cfg["training"]["cumulative_flops_use_backward"]
+        cumulative_flops_cb = CumulativeFLOPSCallback(use_backward=cumulative_flops_use_backward)
+        callbacks.append(cumulative_flops_cb)
+
     logger.info("Loggers and callbacks set up.")
 
     # DAN replaced
@@ -371,7 +401,9 @@ def run_tx_train(cfg: DictConfig):
     elif torch.backends.mps.is_available():
         accelerator = "mps"
     else:
-        accelerator = "cpu"""
+        accelerator = "cpu"
+        
+    """
     
     # DAN: Hardware-Setup with ROCm-Support
     accelerator, backend, plugins = setup_hardware_and_precision(cfg)
@@ -395,8 +427,17 @@ def run_tx_train(cfg: DictConfig):
         gradient_clip_val=cfg["training"]["gradient_clip_val"] if cfg["model"]["name"].lower() != "cpa" else None,
     )
 
+    # Align logging cadence with rolling MFU window (and W&B logging)
+    if "log_every_n_steps" in cfg["training"]:
+        trainer_kwargs["log_every_n_steps"] = cfg["training"]["log_every_n_steps"]
+
     # If it's SimpleSum, override to do exactly 1 epoch, ignoring `max_steps`.
-    if cfg["model"]["name"].lower() == "celltypemean" or cfg["model"]["name"].lower() == "globalsimplesum":
+    if (
+        cfg["model"]["name"].lower() == "celltypemean"
+        or cfg["model"]["name"].lower() == "globalsimplesum"
+        or cfg["model"]["name"].lower() == "perturb_mean"
+        or cfg["model"]["name"].lower() == "context_mean"
+    ):
         trainer_kwargs["max_epochs"] = 1  # do exactly one epoch
         # delete max_steps to avoid conflicts
         del trainer_kwargs["max_steps"]
@@ -469,9 +510,11 @@ def run_tx_train(cfg: DictConfig):
         # Check if output_space differs between current config and checkpoint
         checkpoint_output_space = checkpoint.get("hyper_parameters", {}).get("output_space", "gene")
         current_output_space = cfg["data"]["kwargs"]["output_space"]
-        
+
         if checkpoint_output_space != current_output_space:
-            print(f"Output space mismatch: checkpoint has '{checkpoint_output_space}', current config has '{current_output_space}'")
+            print(
+                f"Output space mismatch: checkpoint has '{checkpoint_output_space}', current config has '{current_output_space}'"
+            )
             print("Creating new decoder for the specified output space...")
 
             if not cfg["model"]["kwargs"].get("gene_decoder_bool", True):
@@ -482,8 +525,7 @@ def run_tx_train(cfg: DictConfig):
                     new_gene_dim = var_dims.get("hvg_dim", 2000)
                 else:  # output_space == "all"
                     new_gene_dim = var_dims.get("gene_dim", 2000)
-                
-                logger.info(f"New gene dimension for output_space='{current_output_space}': {new_gene_dim}")
+
                 new_decoder_cfg = dict(
                     latent_dim=var_dims["output_dim"],
                     gene_dim=new_gene_dim,
@@ -491,7 +533,7 @@ def run_tx_train(cfg: DictConfig):
                     dropout=cfg["model"]["kwargs"].get("decoder_dropout", 0.1),
                     residual_decoder=cfg["model"]["kwargs"].get("residual_decoder", False),
                 )
-                
+
                 # Update the model's decoder_cfg and rebuild decoder
                 model.decoder_cfg = new_decoder_cfg
                 model._build_decoder()
@@ -516,6 +558,8 @@ def run_tx_train(cfg: DictConfig):
                     dropout=model.dropout,
                     activation=model.activation_class,
                 )
+            else:
+                print("WARNING: pert_encoder will not be rebuilt since input dimension matches")
 
         # Filter out mismatched size parameters
         filtered_state = {}

@@ -10,6 +10,7 @@ from tqdm import tqdm
 from torch import nn
 
 from .nn.model import StateEmbeddingModel
+from omegaconf import OmegaConf
 from .train.trainer import get_embeddings
 from .data import create_dataloader
 from .utils import get_embedding_cfg, get_precision_config
@@ -94,13 +95,49 @@ class Inference:
             raise ValueError("Model already initialized")
 
         # Load and initialize model for eval
+        # If no cfg provided, try to restore it from the checkpoint
+        cfg_to_use = self._vci_conf
+        if cfg_to_use is None:
+            try:
+                # Need full checkpoint to access embedded config and embeddings
+                ckpt = torch.load(checkpoint, map_location="cpu", weights_only=False)
+                # Prefer an explicit yaml snapshot if present
+                if isinstance(ckpt, dict) and "cfg_yaml" in ckpt:
+                    cfg_to_use = OmegaConf.create(ckpt["cfg_yaml"])  # type: ignore
+                # Fallback: try hyper_parameters section
+                elif isinstance(ckpt, dict) and "hyper_parameters" in ckpt:
+                    hp = ckpt.get("hyper_parameters", {}) or {}
+                    if isinstance(hp, dict) and "cfg_yaml" in hp:
+                        cfg_to_use = OmegaConf.create(hp["cfg_yaml"])  # type: ignore
+                    elif isinstance(hp, dict) and "cfg" in hp and hp["cfg"] is not None:
+                        cfg_to_use = OmegaConf.create(hp["cfg"])  # type: ignore
+                # Attempt to extract packaged protein embeddings as well
+                if isinstance(ckpt, dict) and "protein_embeds_dict" in ckpt and self.protein_embeds is None:
+                    self.protein_embeds = ckpt["protein_embeds_dict"]
+            except Exception as e:
+                log.warning(f"Could not extract config from checkpoint: {e}")
+
+        if cfg_to_use is None:
+            raise ValueError("No config found in checkpoint and no override provided. Provide --config to proceed.")
+
+        # Keep internal cfg in sync
+        self._vci_conf = cfg_to_use
         self.model = StateEmbeddingModel.load_from_checkpoint(checkpoint, dropout=0.0, strict=False, cfg=self._vci_conf)
-        
+
         # Convert model to appropriate precision for faster inference
-        device_type = 'cuda' if torch.cuda.is_available() else 'cpu'
+        device_type = "cuda" if torch.cuda.is_available() else "cpu"
         precision = get_precision_config(device_type=device_type)
         self.model = self.model.to(precision)
-        
+
+        # Resolve protein embeddings: prefer provided/packaged, then config
+        if self.protein_embeds is None:
+            # Try to extract from the checkpoint payload even if cfg was provided externally
+            try:
+                ckpt2 = torch.load(checkpoint, map_location="cpu", weights_only=False)
+                if isinstance(ckpt2, dict) and "protein_embeds_dict" in ckpt2:
+                    self.protein_embeds = ckpt2["protein_embeds_dict"]
+            except Exception:
+                pass
         all_pe = self.protein_embeds or get_embeddings(self._vci_conf)
         if isinstance(all_pe, dict):
             all_pe = torch.vstack(list(all_pe.values()))
@@ -110,6 +147,7 @@ class Inference:
         self.model.eval()
 
         if self.protein_embeds is None:
+            # Final fallback to config path
             self.protein_embeds = torch.load(get_embedding_cfg(self._vci_conf).all_embeddings, weights_only=False)
 
     def init_from_model(self, model, protein_embeds=None):
@@ -124,18 +162,17 @@ class Inference:
 
     def get_gene_embedding(self, genes):
         protein_embeds = [self.protein_embeds[x] if x in self.protein_embeds else torch.zeros(5120) for x in genes]
-        device_type = 'cuda' if torch.cuda.is_available() else 'cpu'
+        device_type = "cuda" if torch.cuda.is_available() else "cpu"
         precision = get_precision_config(device_type=device_type)
         protein_embeds = torch.stack(protein_embeds).to(self.model.device, dtype=precision)
         return self.model.gene_embedding_layer(protein_embeds)
 
     def encode(self, dataloader, rda=None):
         with torch.no_grad():
-            device_type = 'cuda' if torch.cuda.is_available() else 'cpu'
+            device_type = "cuda" if torch.cuda.is_available() else "cpu"
             precision = get_precision_config(device_type=device_type)
             with torch.autocast(device_type=device_type, dtype=precision):
                 for i, batch in enumerate(dataloader):
-                    torch.cuda.empty_cache()
                     _, _, _, emb, ds_emb = self.model._compute_embedding_for_batch(batch)
                     embeddings = emb.detach().cpu().float().numpy()
 
@@ -150,11 +187,10 @@ class Inference:
         output_adata_path: str | None = None,
         emb_key: str = "X_emb",
         dataset_name: str | None = None,
-        batch_size: int = 32,
+        batch_size: int | None = None,
         lancedb_path: str | None = None,
         update_lancedb: bool = False,
         lancedb_batch_size: int = 1000,
-        gene_column: str = "gene_name",
     ):
         shape_dict = self.__load_dataset_meta(input_adata_path)
         adata = anndata.read_h5ad(input_adata_path)
@@ -164,10 +200,32 @@ class Inference:
         # Convert to CSR format if needed
         adata = self._convert_to_csr(adata)
 
-        device_type = 'cuda' if torch.cuda.is_available() else 'cpu'
+        # Auto-detect the best gene column
+        gene_column: Optional[str] = self._auto_detect_gene_column(adata)
+
+        device_type = "cuda" if torch.cuda.is_available() else "cpu"
         precision = get_precision_config(device_type=device_type)
+
+        # Allow overriding batch size for faster inference if more VRAM is available
+        dataloader_cfg = self._vci_conf
+        if batch_size is not None:
+            try:
+                dataloader_cfg = OmegaConf.create(OmegaConf.to_container(self._vci_conf, resolve=True))
+                # Ensure nested structure exists
+                if not hasattr(dataloader_cfg, "model"):
+                    dataloader_cfg["model"] = {}
+                dataloader_cfg.model.batch_size = int(batch_size)
+                log.info(f"Using override batch size: {batch_size}")
+            except Exception:
+                # Fallback: attempt direct set; if it fails, proceed with original config
+                try:
+                    dataloader_cfg.model.batch_size = int(batch_size)
+                    log.info(f"Using override batch size: {batch_size}")
+                except Exception:
+                    log.warning("Failed to override batch size; using config default")
+
         dataloader = create_dataloader(
-            self._vci_conf,
+            dataloader_cfg,
             adata=adata,
             adata_name=dataset_name or "inference",
             shape_dict=shape_dict,
@@ -192,7 +250,7 @@ class Inference:
 
             # concatenate along axis -1 with all embeddings
             all_embeddings = np.concatenate([all_embeddings, all_ds_embeddings], axis=-1)
-        
+
         # if output_adata_path is provided, write the adata to the file
         if output_adata_path is not None:
             adata.obsm[emb_key] = all_embeddings
@@ -201,31 +259,74 @@ class Inference:
         # Save to lancedb, if requested
         if lancedb_path is not None:
             from .vectordb import StateVectorDB
-        
+
             log.info(f"Saving embeddings to LanceDB at {lancedb_path}")
             vector_db = StateVectorDB(lancedb_path)
-        
+
             # Extract relevant metadata
             metadata = adata.obs.copy()
-        
+
             # Create or update the database
             vector_db.create_or_update_table(
                 embeddings=all_embeddings,
                 metadata=metadata,
                 embedding_key=emb_key,
                 dataset_name=dataset_name or Path(input_adata_path).stem,
-                batch_size=lancedb_batch_size
+                batch_size=lancedb_batch_size,
             )
-        
+
             log.info(f"Successfully saved {len(all_embeddings)} embeddings to LanceDB")
 
     def _convert_to_csr(self, adata):
         """Convert the adata.X matrix to CSR format if it's not already."""
         from scipy.sparse import csr_matrix, issparse
+
         if issparse(adata.X) and not isinstance(adata.X, csr_matrix):
-            log.info(f"Converting {type(adata.X).__name__} to csr_matrix format")
+            print(f"Converting {type(adata.X).__name__} to csr_matrix format")
             adata.X = csr_matrix(adata.X)
         return adata
+
+    def _auto_detect_gene_column(self, adata):
+        """Auto-detect the gene column with highest overlap with protein embeddings."""
+        if self.protein_embeds is None:
+            log.warning("No protein embeddings available for auto-detection, using index")
+            return None
+
+        protein_genes = set(self.protein_embeds.keys())
+        best_column = None
+        best_overlap = 0
+        best_overlap_pct = 0
+
+        # Check index first
+        if hasattr(adata.var, "index"):
+            index_genes = set(adata.var.index)
+            overlap = len(protein_genes.intersection(index_genes))
+            overlap_pct = overlap / len(index_genes) if len(index_genes) > 0 else 0
+            if overlap > best_overlap:
+                best_overlap = overlap
+                best_overlap_pct = overlap_pct
+                best_column = None  # None means use index
+
+        # Check all columns in var
+        for col in adata.var.columns:
+            col_genes = set(adata.var[col].dropna().astype(str))
+            overlap = len(protein_genes.intersection(col_genes))
+            overlap_pct = overlap / len(col_genes) if len(col_genes) > 0 else 0
+            if overlap > best_overlap:
+                best_overlap = overlap
+                best_overlap_pct = overlap_pct
+                best_column = col
+
+        if best_column is None:
+            log.info(
+                f"Auto-detected gene column: var.index (overlap: {best_overlap}/{len(protein_genes)} protein embeddings, {best_overlap_pct:.1%} of genes)"
+            )
+        else:
+            log.info(
+                f"Auto-detected gene column: var.{best_column} (overlap: {best_overlap}/{len(protein_genes)} protein embeddings, {best_overlap_pct:.1%} of genes)"
+            )
+
+        return best_column
 
     def decode_from_file(self, adata_path, emb_key: str, read_depth=None, batch_size=64):
         adata = anndata.read_h5ad(adata_path)
@@ -238,8 +339,8 @@ class Inference:
             cell_embs = adata.obsm[emb_key]
         except:
             cell_embs = adata.X
-            
-        device_type = 'cuda' if torch.cuda.is_available() else 'cpu'
+
+        device_type = "cuda" if torch.cuda.is_available() else "cpu"
         precision = get_precision_config(device_type=device_type)
         cell_embs = torch.Tensor(cell_embs).to(self.model.device, dtype=precision)
 
@@ -251,10 +352,14 @@ class Inference:
         with torch.autocast(device_type=device_type, dtype=precision):
             for i in tqdm(range(0, cell_embs.size(0), batch_size), total=int(cell_embs.size(0) // batch_size)):
                 cell_embeds_batch = cell_embs[i : i + batch_size]
-                task_counts = torch.full((cell_embeds_batch.shape[0],), read_depth, device=self.model.device, dtype=precision)
+                task_counts = torch.full(
+                    (cell_embeds_batch.shape[0],), read_depth, device=self.model.device, dtype=precision
+                )
 
-                ds_emb = cell_embeds_batch[:, -self.model.z_dim_ds:] # last ten columns are the dataset embeddings
-                merged_embs = StateEmbeddingModel.resize_batch(cell_embeds_batch, gene_embeds, task_counts=task_counts, ds_emb=ds_emb)
+                ds_emb = cell_embeds_batch[:, -self.model.z_dim_ds :]  # last ten columns are the dataset embeddings
+                merged_embs = StateEmbeddingModel.resize_batch(
+                    cell_embeds_batch, gene_embeds, task_counts=task_counts, ds_emb=ds_emb
+                )
                 logprobs_batch = self.model.binary_decoder(merged_embs)
                 logprobs_batch = logprobs_batch.detach().cpu().float().numpy()
                 yield logprobs_batch.squeeze()

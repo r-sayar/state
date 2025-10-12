@@ -14,26 +14,29 @@ from typing import Tuple
 from .base import PerturbationModel
 from .decoders import FinetuneVCICountsDecoder
 from .decoders_nb import NBDecoder, nb_nll
-from .utils import build_mlp, get_activation_class, get_transformer_backbone
+from .utils import build_mlp, get_activation_class, get_transformer_backbone, apply_lora
 
 
 logger = logging.getLogger(__name__)
+
 
 class CombinedLoss(nn.Module):
     """
     Combined Sinkhorn + Energy loss
     """
+
     def __init__(self, sinkhorn_weight=0.001, energy_weight=1.0, blur=0.05):
         super().__init__()
         self.sinkhorn_weight = sinkhorn_weight
         self.energy_weight = energy_weight
         self.sinkhorn_loss = SamplesLoss(loss="sinkhorn", blur=blur)
         self.energy_loss = SamplesLoss(loss="energy", blur=blur)
-    
+
     def forward(self, pred, target):
         sinkhorn_val = self.sinkhorn_loss(pred, target)
         energy_val = self.energy_loss(pred, target)
         return self.sinkhorn_weight * sinkhorn_val + self.energy_weight * energy_val
+
 
 class ConfidenceToken(nn.Module):
     """
@@ -185,7 +188,7 @@ class StateTransitionPerturbationModel(PerturbationModel):
         self.use_basal_projection = kwargs.get("use_basal_projection", True)
 
         # Build the underlying neural OT network
-        self._build_networks()
+        self._build_networks(lora_cfg=kwargs.get("lora", None))
 
         # Add an optional encoder that introduces a batch variable
         self.batch_encoder = None
@@ -211,15 +214,18 @@ class StateTransitionPerturbationModel(PerturbationModel):
             self.confidence_token = ConfidenceToken(hidden_dim=self.hidden_dim, dropout=self.dropout)
             self.confidence_loss_fn = nn.MSELoss()
 
-        self.freeze_pert_backbone = kwargs.get("freeze_pert_backbone", False)
+        # Backward-compat: accept legacy key `freeze_pert`
+        self.freeze_pert_backbone = kwargs.get("freeze_pert_backbone", kwargs.get("freeze_pert", False))
         if self.freeze_pert_backbone:
-            modules_to_freeze = [
-                self.transformer_backbone,
-                self.project_out,
-            ]
-            for module in modules_to_freeze:
-                for param in module.parameters():
+            # Freeze backbone base weights but keep LoRA adapter weights (if present) trainable
+            for name, param in self.transformer_backbone.named_parameters():
+                if "lora_" in name:
+                    param.requires_grad = True
+                else:
                     param.requires_grad = False
+            # Freeze projection head as before
+            for param in self.project_out.parameters():
+                param.requires_grad = False
 
         if kwargs.get("nb_decoder", False):
             self.gene_decoder = NBDecoder(
@@ -258,10 +264,9 @@ class StateTransitionPerturbationModel(PerturbationModel):
                 genes=gene_names,
                 # latent_dim=self.output_dim + (self.batch_dim or 0),
             )
-
         print(self)
 
-    def _build_networks(self):
+    def _build_networks(self, lora_cfg=None):
         """
         Here we instantiate the actual GPT2-based model.
         """
@@ -292,6 +297,14 @@ class StateTransitionPerturbationModel(PerturbationModel):
             self.transformer_backbone_kwargs,
         )
 
+        # Optionally wrap backbone with LoRA adapters
+        if lora_cfg and lora_cfg.get("enable", False):
+            self.transformer_backbone = apply_lora(
+                self.transformer_backbone,
+                self.transformer_backbone_key,
+                lora_cfg,
+            )
+
         # Project from input_dim to hidden_dim for transformer input
         # self.project_to_hidden = nn.Linear(self.input_dim, self.hidden_dim)
 
@@ -304,7 +317,7 @@ class StateTransitionPerturbationModel(PerturbationModel):
             activation=self.activation_class,
         )
 
-        if self.output_space == 'all':
+        if self.output_space == "all":
             self.final_down_then_up = nn.Sequential(
                 nn.Linear(self.output_dim, self.output_dim // 8),
                 nn.GELU(),
@@ -441,9 +454,9 @@ class StateTransitionPerturbationModel(PerturbationModel):
 
         main_loss = self.loss_fn(pred, target).nanmean()
         self.log("train_loss", main_loss)
-        
+
         # Log individual loss components if using combined loss
-        if hasattr(self.loss_fn, 'sinkhorn_loss') and hasattr(self.loss_fn, 'energy_loss'):
+        if hasattr(self.loss_fn, "sinkhorn_loss") and hasattr(self.loss_fn, "energy_loss"):
             sinkhorn_component = self.loss_fn.sinkhorn_loss(pred, target).nanmean()
             energy_component = self.loss_fn.energy_loss(pred, target).nanmean()
             self.log("train/sinkhorn_loss", sinkhorn_component)
@@ -537,9 +550,9 @@ class StateTransitionPerturbationModel(PerturbationModel):
 
         loss = self.loss_fn(pred, target).mean()
         self.log("val_loss", loss)
-        
+
         # Log individual loss components if using combined loss
-        if hasattr(self.loss_fn, 'sinkhorn_loss') and hasattr(self.loss_fn, 'energy_loss'):
+        if hasattr(self.loss_fn, "sinkhorn_loss") and hasattr(self.loss_fn, "energy_loss"):
             sinkhorn_component = self.loss_fn.sinkhorn_loss(pred, target).mean()
             energy_component = self.loss_fn.energy_loss(pred, target).mean()
             self.log("val/sinkhorn_loss", sinkhorn_component)
@@ -666,7 +679,7 @@ class StateTransitionPerturbationModel(PerturbationModel):
             output_dict["pert_cell_counts_preds"] = pert_cell_counts_preds
 
         return output_dict
-
+#added in merge, need to verify
     def configure_optimizers(self):
         """Configure optimizer with optional learning rate scheduling and weight decay."""
         optimizer = optim.Adam(
