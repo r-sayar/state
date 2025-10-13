@@ -6,8 +6,9 @@ from ..models import PerturbationModel
 from .batch_speed_monitor import BatchSpeedMonitorCallback
 from .model_flops_utilization import ModelFLOPSUtilizationCallback
 from .cumulative_flops import CumulativeFLOPSCallback
+from .scheduled_finetuning import ScheduledFinetuningCallback
 
-__all__ = ["PerturbationModel", "BatchSpeedMonitorCallback", "ModelFLOPSUtilizationCallback", "CumulativeFLOPSCallback"]
+__all__ = ["PerturbationModel", "BatchSpeedMonitorCallback", "ModelFLOPSUtilizationCallback", "CumulativeFLOPSCallback", "ScheduledFinetuningCallback",  "ScheduledFinetuningCallback"]
 
 
 class GradNormCallback(Callback):

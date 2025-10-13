@@ -43,3 +43,5 @@ readable_training.log
 *.slurm
 temp
 wandb/
+
+venv/
