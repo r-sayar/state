@@ -587,12 +587,15 @@ def run_tx_train(cfg: DictConfig):
         print("trainer.fit() completed with manual checkpoint")
     else:
         print(f"About to call trainer.fit() with checkpoint_path={checkpoint_path}")
-        # Train
+        checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
+        #Not loading the optimizer! Is not optimal! #todo
+        model.load_state_dict(checkpoint["state_dict"], strict=False)
+
         trainer.fit(
             model,
             datamodule=data_module,
-            ckpt_path=checkpoint_path,
-        )
+            
+        )#ckpt_path=checkpoint_path,
         print("trainer.fit() completed")
 
     print("Training completed, saving final checkpoint...")
