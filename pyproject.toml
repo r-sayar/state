@@ -54,5 +54,11 @@ state = "state.__main__:main"
 venvPath = "."
 venv = ".venv"
 
+[tool.uv.workspace]
+members = [
+    "state",
+    "state_env",
+]
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/state"]

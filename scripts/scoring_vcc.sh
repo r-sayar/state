@@ -24,9 +24,9 @@ CKPT="final.ckpt"
 OUT_DIR=cell-eval-outdir
 
 # parallelization
-THREADS=8
-NUM_WORKERS=8
-BATCH_SIZE=100
+THREADS=16
+NUM_WORKERS=16
+BATCH_SIZE=200
 
 # -- Activate working environment --
 source ~/miniforge3/etc/profile.d/conda.sh
