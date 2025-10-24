@@ -54,6 +54,12 @@ def run_with_config(cfg: DictConfig):
         log.error("Please set the desired dataset to 'dataset.current'")
         sys.exit(1)
 
+    # Log additional parameters if available (for embedding models)
+    # Check if there are any TOML-like configs or additional parameters to log
+    if hasattr(cfg, 'additional_params') or hasattr(cfg, 'data_config'):
+        log.info("Additional parameters found for logging")
+        # Add any additional logging logic here if needed for embedding models
+
     os.environ["MASTER_PORT"] = str(cfg.experiment.port)
     # WAR: Workaround for sbatch failing when --ntasks-per-node is set.
     # lightning expects this to be set.

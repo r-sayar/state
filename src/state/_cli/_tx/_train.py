@@ -209,6 +209,48 @@ def run_tx_train(cfg: DictConfig):
 
     )
 
+    # Load and log TOML config contents for wandb
+    if cfg["data"]["kwargs"]["toml_config_path"] is not None:
+        toml_path = cfg["data"]["kwargs"]["toml_config_path"]
+        try:
+            # Try different TOML libraries in order of preference
+            toml_contents = None
+            if toml_contents is None:
+                try:
+                    import tomllib
+                    with open(toml_path, "rb") as f:
+                        toml_contents = tomllib.load(f)
+                except (ImportError, AttributeError):
+                    pass
+
+            if toml_contents is None:
+                try:
+                    import tomli as tomllib
+                    with open(toml_path, "rb") as f:
+                        toml_contents = tomllib.load(f)
+                except ImportError:
+                    pass
+
+            if toml_contents is None:
+                try:
+                    import toml
+                    with open(toml_path, "r") as f:
+                        toml_contents = toml.load(f)
+                except ImportError:
+                    pass
+
+            if toml_contents is None:
+                logger.warning("No TOML library available (tomllib, tomli, or toml), cannot load TOML config contents")
+            else:
+                # Add TOML contents to config for wandb logging
+                cfg["toml_config_contents"] = toml_contents
+
+                logger.info(f"Loaded TOML config from {toml_path}")
+                logger.info(f"TOML contents: {toml_contents}")
+
+        except Exception as e:
+            logger.warning(f"Could not load TOML config from {toml_path}: {e}")
+
     with open(join(run_output_dir, "data_module.torch"), "wb") as f:
         # TODO-Abhi: only save necessary data
         data_module.save_state(f)
