@@ -7,7 +7,7 @@
 MODEL_DIR="../state-big/models/"
 
 # experiment name
-DIR_NAME="few-params-baseline"
+DIR_NAME="gio-baseline-validation"
 
 WANDB_PROJECT="vcc"
 WANDB_ENTITY="rsayar728-freie-universit-t-berlin"
@@ -31,12 +31,13 @@ OUT_DIR=../state-big/model-results/pipeline_gio
 # parallelization
 THREADS=16
 NUM_WORKERS=12
-BATCH_SIZE=64
+BATCH_SIZE=32
 
 # Exit on error
 set -e
 export OMP_NUM_THREADS=$THREADS VECLIB_MAXIMUM_THREADS=$THREADS
 export HDF5_USE_FILE_LOCKING=FALSE
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
 
 # Copy this script into the model directory for reproducibility
@@ -92,8 +93,8 @@ uv run state tx train \
   model.kwargs.n_encoder_layers=3 \
   model.kwargs.n_decoder_layers=3 \
   +trainer.accelerator=gpu \
-  +trainer.devices=2 \
-  +trainer.strategy=ddp \
+  +trainer.devices=1 \
+  +trainer.accumulate_grad_batches=4 \
 
 #model.kwargs.transformer_backbone_kwargs.num_hidden_layers=2 \
 
