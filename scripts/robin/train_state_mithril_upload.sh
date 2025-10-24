@@ -28,9 +28,9 @@ PERT_FEATURES="../state-big/data/ESM2_pert_features.pt"
 OUT_DIR=../state-big/model-results/pipeline_holdouts_robin
 
 # parallelization
-THREADS=8
-NUM_WORKERS=8
-BATCH_SIZE=100
+THREADS=16
+NUM_WORKERS=12
+BATCH_SIZE=64
 
 # Exit on error
 set -e
@@ -67,7 +67,7 @@ fi
 echo "#### Running training ####"
 
 
-state tx train \
+uv run state tx train \
   data.kwargs.toml_config_path=${TOML_CONFIG} \
   data.kwargs.num_workers=${NUM_WORKERS} \
   data.kwargs.batch_col=batch_var \
@@ -78,6 +78,7 @@ state tx train \
   training.max_steps=40000 \
   training.ckpt_every_n_steps=1000 \
   training.val_freq=1000 \
+  training.batch_size=${BATCH_SIZE} \
   model=state_sm \
   model.kwargs.nb_decoder=true \
   wandb.tags=[${DIR_NAME}] \
@@ -90,13 +91,15 @@ state tx train \
   model.kwargs.n_encoder_layers=3 \
   model.kwargs.n_decoder_layers=3 \
   +trainer.accelerator=gpu \
+  +trainer.devices=2 \
+  +trainer.strategy=ddp \
 
 #model.kwargs.transformer_backbone_kwargs.num_hidden_layers=2 \
 
 echo "#### Running inference ####"
 
 # gets prediction.h5ad for the holdout predictions
-state tx infer \
+uv run state tx infer \
   --output ${MODEL_DIR}/${DIR_NAME}/prediction.h5ad \
   --model_dir ${MODEL_DIR}/${DIR_NAME} \
   --checkpoint ${MODEL_DIR}/${DIR_NAME}/checkpoints/final.ckpt \
@@ -119,7 +122,7 @@ for ckpt in "$CKPT_DIR"/*.ckpt; do
   ckpt_name=$(basename "$ckpt" .ckpt)
   out="${COMP_INFER_DIR}/${ckpt_name}.h5ad"
   echo "Running competition inference for checkpoint: $ckpt -> $out"
-  state tx infer \
+  uv run state tx infer \
     --output "$out" \
     --model-dir "${MODEL_DIR}/${DIR_NAME}" \
     --checkpoint "$ckpt" \
@@ -130,4 +133,4 @@ shopt -u nullglob
 
 echo "#### Running cell-eval prep ####"
 # # remember to have `sudo apt install -y zstd` before running this
-# uv tool run --from git+https://github.com/ArcInstitute/cell-eval@main cell-eval prep -i ${MODEL_DIR}/${DIR_NAME}/competition_val_prediction.h5ad -g ${COMPETITION_SUPPORT_SET}/gene_names.csv
+uv tool run --from git+https://github.com/ArcInstitute/cell-eval@main cell-eval prep -i ${MODEL_DIR}/${DIR_NAME}/competition_val_prediction.h5ad -g ${COMPETITION_SUPPORT_SET}/gene_names.csv
