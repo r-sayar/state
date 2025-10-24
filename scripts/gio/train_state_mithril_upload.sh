@@ -7,7 +7,7 @@
 MODEL_DIR="../state-big/models/"
 
 # experiment name
-DIR_NAME="gio-baseline-validation"
+DIR_NAME="gio-lg-fresh-start"
 
 WANDB_PROJECT="vcc"
 WANDB_ENTITY="rsayar728-freie-universit-t-berlin"
@@ -31,7 +31,7 @@ OUT_DIR=../state-big/model-results/pipeline_gio
 # parallelization
 THREADS=16
 NUM_WORKERS=12
-BATCH_SIZE=32
+BATCH_SIZE=64
 
 # Exit on error
 set -e
@@ -81,7 +81,7 @@ uv run state tx train \
   training.ckpt_every_n_steps=1000 \
   training.val_freq=1000 \
   training.batch_size=${BATCH_SIZE} \
-  model=state_sm \
+  model=state_lg \
   model.kwargs.nb_decoder=true \
   wandb.tags=[${DIR_NAME}] \
   wandb.project=${WANDB_PROJECT} \
@@ -94,7 +94,7 @@ uv run state tx train \
   model.kwargs.n_decoder_layers=3 \
   +trainer.accelerator=gpu \
   +trainer.devices=1 \
-  +trainer.accumulate_grad_batches=4 \
+  +trainer.accumulate_grad_batches=2 \
 
 #model.kwargs.transformer_backbone_kwargs.num_hidden_layers=2 \
 
